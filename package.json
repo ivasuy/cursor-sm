@@ -1,0 +1,47 @@
+{
+  "name": "cursor-session-tracker",
+  "displayName": "Cursor Session Tracker",
+  "description": "Track workspace session changes and generate summaries.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cursorSessionTracker.endSession",
+        "title": "End Session & Generate Summary"
+      }
+    ],
+    "configuration": {
+      "title": "Cursor Session Tracker",
+      "properties": {
+        "cursorSessionTracker.groqApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Groq API key for AI-assisted insights (free tier). Leave empty to use deterministic-only mode."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "package": "vsce package",
+    "lint": "echo \"No lint configured\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.5",
+    "@vscode/vsce": "^3.7.1"
+  }
+}
