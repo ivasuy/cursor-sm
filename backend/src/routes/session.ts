@@ -5,6 +5,7 @@ import {
 } from "../middleware/auth";
 import { generateSummary } from "../services/vertex";
 import { checkUsageQuota, incrementUsage } from "../services/usage";
+import { saveSessionSummary } from "../services/sessions";
 
 export const sessionRouter = Router();
 
@@ -31,6 +32,12 @@ sessionRouter.post(
 
       const markdown = await generateSummary({ session, analysis });
       await incrementUsage(uid);
+
+      try {
+        await saveSessionSummary(uid, { session, analysis }, markdown);
+      } catch {
+        // Non-critical: session summary save failure shouldn't block response
+      }
 
       res.json({ markdown });
     } catch (error) {

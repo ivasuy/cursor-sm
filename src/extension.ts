@@ -222,8 +222,20 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.workspace.getConfiguration("cursorSessionTracker");
       const backendUrl =
         config.get<string>("backendUrl") || "http://localhost:3000";
-      const authUrl = `${backendUrl}/api/auth/google`;
-      await vscode.env.openExternal(vscode.Uri.parse(authUrl));
+      const scheme = vscode.env.uriScheme;
+      const authUrl = `${backendUrl}/api/auth/google?scheme=${encodeURIComponent(scheme)}`;
+
+      // Force open in system default browser (not Cursor's internal browser)
+      const { exec } = require("child_process");
+      const platform = process.platform;
+
+      if (platform === "darwin") {
+        exec(`open "${authUrl}"`);
+      } else if (platform === "win32") {
+        exec(`start "" "${authUrl}"`);
+      } else {
+        exec(`xdg-open "${authUrl}"`);
+      }
     }
   );
 
@@ -241,8 +253,122 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  const setDisplayNameCommand = vscode.commands.registerCommand(
+    "cursorSessionTracker.setDisplayName",
+    async () => {
+      const config =
+        vscode.workspace.getConfiguration("cursorSessionTracker");
+      const current = config.get<string>("displayName") || "";
+      const name = await vscode.window.showInputBox({
+        prompt: "Enter the name to display on your shareable session cards",
+        placeHolder: "e.g. @username or your name",
+        value: current,
+      });
+      if (name === undefined) return;
+      const trimmed = name.trim();
+      await config.update(
+        "displayName",
+        trimmed,
+        vscode.ConfigurationTarget.Global
+      );
+
+      const idToken = await getStoredIdToken();
+      if (idToken) {
+        try {
+          await callBackendJson(
+            "PATCH",
+            "/api/user/profile",
+            { displayName: trimmed },
+            idToken
+          );
+        } catch {
+          // Sync failed, local setting still saved
+        }
+      }
+      vscode.window.showInformationMessage(
+        trimmed
+          ? `Display name set to "${trimmed}".`
+          : "Display name cleared."
+      );
+    }
+  );
+
+  const generateCardCommand = vscode.commands.registerCommand(
+    "cursorSessionTracker.generateCard",
+    async () => {
+      const idToken = await getStoredIdToken();
+      if (!idToken) {
+        const action = await vscode.window.showWarningMessage(
+          "Sign in to generate shareable session cards.",
+          "Sign In"
+        );
+        if (action === "Sign In") {
+          vscode.commands.executeCommand("cursorSessionTracker.signIn");
+        }
+        return;
+      }
+
+      const today = new Date().toISOString().split("T")[0];
+      const dateInput = await vscode.window.showInputBox({
+        prompt: "Enter date for the card (YYYY-MM-DD)",
+        placeHolder: today,
+        value: today,
+        validateInput: (value) => {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return "Please use YYYY-MM-DD format";
+          }
+          return null;
+        },
+      });
+      if (!dateInput) return;
+
+      const cardData = await callBackendRaw(
+        "GET",
+        `/api/card?date=${dateInput}`,
+        idToken
+      );
+
+      if (!cardData) {
+        vscode.window.showErrorMessage(
+          "Failed to generate card. Make sure you have sessions for that date."
+        );
+        return;
+      }
+
+      const ctx = getWorkspaceContextForCommand();
+      if (!ctx) {
+        vscode.window.showWarningMessage("No workspace open.");
+        return;
+      }
+
+      const sessionsFolderPath = path.join(ctx.summaryDirectory, SUMMARY_FOLDER);
+      const sessionsFolderUri = vscode.Uri.file(sessionsFolderPath);
+      try {
+        await vscode.workspace.fs.createDirectory(sessionsFolderUri);
+      } catch {
+        // Folder may exist
+      }
+
+      const cardFilename = `card-${dateInput}.png`;
+      const cardPath = path.join(sessionsFolderPath, cardFilename);
+
+      await vscode.workspace.fs.writeFile(
+        vscode.Uri.file(cardPath),
+        cardData
+      );
+
+      const action = await vscode.window.showInformationMessage(
+        `Card saved to ${SUMMARY_FOLDER}/${cardFilename}`,
+        "Open Card"
+      );
+      if (action === "Open Card") {
+        await vscode.env.openExternal(vscode.Uri.file(cardPath));
+      }
+    }
+  );
+
   const uriHandler = vscode.window.registerUriHandler({
-    handleUri(uri: vscode.Uri) {
+    async handleUri(uri: vscode.Uri) {
       if (uri.path === "/auth-callback") {
         const params = new URLSearchParams(uri.query);
         const idToken = params.get("idToken");
@@ -251,16 +377,30 @@ export function activate(context: vscode.ExtensionContext) {
         const userId = params.get("userId");
 
         if (refreshToken) {
-          extensionContext.secrets.store("refreshToken", refreshToken);
+          await extensionContext.secrets.store("refreshToken", refreshToken);
         }
         if (idToken) {
-          extensionContext.secrets.store("idToken", idToken);
+          await extensionContext.secrets.store("idToken", idToken);
         }
         if (userId) {
-          extensionContext.globalState.update("userId", userId);
+          await extensionContext.globalState.update("userId", userId);
         }
         if (email) {
-          extensionContext.globalState.update("userEmail", email);
+          await extensionContext.globalState.update("userEmail", email);
+        }
+
+        // Create/update user profile in Firestore
+        if (idToken && email) {
+          try {
+            await callBackendJson(
+              "POST",
+              "/api/user/register",
+              { email },
+              idToken
+            );
+          } catch {
+            // Profile creation is non-critical, user is still signed in locally
+          }
         }
 
         vscode.window.showInformationMessage(
@@ -340,6 +480,8 @@ export function activate(context: vscode.ExtensionContext) {
     addNoteCommand,
     signInCommand,
     signOutCommand,
+    setDisplayNameCommand,
+    generateCardCommand,
     uriHandler,
     createListener,
     deleteListener,
@@ -466,6 +608,7 @@ async function endSessionAndGenerateSummary() {
 
   await extensionContext.workspaceState.update("sessionNotes", []);
 
+  let usedAiSummary = false;
   const idToken = await getStoredIdToken();
   if (idToken) {
     try {
@@ -476,9 +619,18 @@ async function endSessionAndGenerateSummary() {
       );
       if (aiSummary) {
         summary = aiSummary;
+        usedAiSummary = true;
       }
     } catch {
       // Backend unavailable, use local summary
+    }
+  } else {
+    const action = await vscode.window.showInformationMessage(
+      "Using local summary. Sign in for AI-powered summaries and shareable session cards.",
+      "Sign In"
+    );
+    if (action === "Sign In") {
+      vscode.commands.executeCommand("cursorSessionTracker.signIn");
     }
   }
 
@@ -507,6 +659,14 @@ async function endSessionAndGenerateSummary() {
       vscode.Uri.file(summaryPath)
     );
     await vscode.window.showTextDocument(doc, { preview: false });
+
+    if (usedAiSummary && idToken) {
+      try {
+        await fetchAndSaveCard(sessionsFolderPath, idToken);
+      } catch {
+        // Card generation is non-critical
+      }
+    }
   } catch (error) {
     const message =
       error instanceof Error
@@ -518,6 +678,40 @@ async function endSessionAndGenerateSummary() {
   } finally {
     sessionManager.removeSession(workspaceKey);
     startWorkspaceSession();
+  }
+}
+
+async function fetchAndSaveCard(
+  sessionsFolderPath: string,
+  idToken: string
+): Promise<void> {
+  const today = new Date().toISOString().split("T")[0];
+  const lastCardDate =
+    extensionContext.globalState.get<string>("lastCardDate");
+  if (lastCardDate === today) return;
+
+  const cardData = await callBackendRaw(
+    "GET",
+    `/api/card?date=${today}`,
+    idToken
+  );
+  if (!cardData) return;
+
+  const cardFilename = `card-${today}.png`;
+  const cardPath = path.join(sessionsFolderPath, cardFilename);
+
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(cardPath),
+    cardData
+  );
+  await extensionContext.globalState.update("lastCardDate", today);
+
+  const action = await vscode.window.showInformationMessage(
+    `Your daily session card is ready! Saved to ${SUMMARY_FOLDER}/${cardFilename}`,
+    "Open Card"
+  );
+  if (action === "Open Card") {
+    await vscode.env.openExternal(vscode.Uri.file(cardPath));
   }
 }
 
@@ -1499,11 +1693,44 @@ async function validateBackendConnection(): Promise<void> {
         (res) => {
           let data = "";
           res.on("data", (chunk: string) => (data += chunk));
-          res.on("end", () => {
+          res.on("end", async () => {
             try {
               const json = JSON.parse(data);
               if (json.status === "ok") {
                 statusBarItem.tooltip += ` | Backend v${json.version || "?"}`;
+
+                if (json.firebaseApiKey) {
+                  const currentKey = config.get<string>("firebaseApiKey");
+                  if (!currentKey) {
+                    await config.update(
+                      "firebaseApiKey",
+                      json.firebaseApiKey,
+                      vscode.ConfigurationTarget.Global
+                    );
+                  }
+                }
+
+                const email =
+                  extensionContext.globalState.get<string>("userEmail");
+                const hasSeenPrompt =
+                  extensionContext.globalState.get<boolean>(
+                    "hasSeenSignInPrompt"
+                  );
+                if (!email && !hasSeenPrompt) {
+                  await extensionContext.globalState.update(
+                    "hasSeenSignInPrompt",
+                    true
+                  );
+                  const action = await vscode.window.showInformationMessage(
+                    "Sign in to enable AI-powered session summaries and shareable cards.",
+                    "Sign In"
+                  );
+                  if (action === "Sign In") {
+                    vscode.commands.executeCommand(
+                      "cursorSessionTracker.signIn"
+                    );
+                  }
+                }
               }
             } catch {
               // non-JSON response
@@ -1648,6 +1875,105 @@ function callBackendSummarize(
       resolve(null);
     });
     req.write(payload);
+    req.end();
+  });
+}
+
+function callBackendJson(
+  method: string,
+  apiPath: string,
+  body: Record<string, unknown> | null,
+  idToken: string
+): Promise<Record<string, unknown> | null> {
+  return new Promise((resolve) => {
+    const config =
+      vscode.workspace.getConfiguration("cursorSessionTracker");
+    const backendUrl =
+      config.get<string>("backendUrl") || "http://localhost:3000";
+
+    const payload = body ? JSON.stringify(body) : "";
+    const parsed = new URL(`${backendUrl}${apiPath}`);
+    const isHttps = parsed.protocol === "https:";
+    const lib = isHttps ? https : http;
+
+    const options: http.RequestOptions = {
+      hostname: parsed.hostname,
+      port: parsed.port || (isHttps ? "443" : "80"),
+      path: parsed.pathname + parsed.search,
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+        ...(payload ? { "Content-Length": String(Buffer.byteLength(payload)) } : {}),
+      },
+      timeout: 15000,
+    };
+
+    const req = lib.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk: string) => (data += chunk));
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function callBackendRaw(
+  method: string,
+  apiPath: string,
+  idToken: string
+): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    const config =
+      vscode.workspace.getConfiguration("cursorSessionTracker");
+    const backendUrl =
+      config.get<string>("backendUrl") || "http://localhost:3000";
+
+    const parsed = new URL(`${backendUrl}${apiPath}`);
+    const isHttps = parsed.protocol === "https:";
+    const lib = isHttps ? https : http;
+
+    const options: http.RequestOptions = {
+      hostname: parsed.hostname,
+      port: parsed.port || (isHttps ? "443" : "80"),
+      path: parsed.pathname + parsed.search,
+      method,
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+      timeout: 15000,
+    };
+
+    const req = lib.request(options, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(Buffer.concat(chunks));
+        } else {
+          resolve(null);
+        }
+      });
+    });
+
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
     req.end();
   });
 }

@@ -15,5 +15,6 @@ configRouter.get("/", (_req, res) => {
       auth: true,
       usage: true,
     },
+    firebaseApiKey: process.env.FIREBASE_API_KEY || "",
   });
 });

@@ -5,6 +5,8 @@ import { initializeApp, cert } from "firebase-admin/app";
 import { sessionRouter } from "./routes/session";
 import { authRouter } from "./routes/auth";
 import { configRouter } from "./routes/config";
+import { userRouter } from "./routes/user";
+import { cardRouter } from "./routes/card";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -41,6 +43,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "10mb" }));
+app.use("/static", express.static(path.join(__dirname, "../public")));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", firebase: firebaseReady });
@@ -61,6 +64,8 @@ const firebaseGuard: express.RequestHandler = (_req, res, next) => {
 
 app.use("/api/auth", firebaseGuard, authRouter);
 app.use("/api/session", firebaseGuard, sessionRouter);
+app.use("/api/user", firebaseGuard, userRouter);
+app.use("/api/card", firebaseGuard, cardRouter);
 
 const port = parseInt(process.env.PORT || "3000", 10);
 app.listen(port, () => {
