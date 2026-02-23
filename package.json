@@ -2,7 +2,7 @@
   "name": "cursor-session-tracker",
   "displayName": "Cursor Session Tracker",
   "description": "Track workspace session changes and generate summaries.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "local",
   "engines": {
     "vscode": "^1.85.0"
@@ -19,15 +19,32 @@
       {
         "command": "cursorSessionTracker.endSession",
         "title": "End Session & Generate Summary"
+      },
+      {
+        "command": "cursorSessionTracker.addSessionNote",
+        "title": "Add Session Note"
+      },
+      {
+        "command": "cursorSessionTracker.signIn",
+        "title": "Session Tracker: Sign In with Google"
+      },
+      {
+        "command": "cursorSessionTracker.signOut",
+        "title": "Session Tracker: Sign Out"
       }
     ],
     "configuration": {
       "title": "Cursor Session Tracker",
       "properties": {
-        "cursorSessionTracker.groqApiKey": {
+        "cursorSessionTracker.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Backend API URL for AI-powered summaries."
+        },
+        "cursorSessionTracker.firebaseApiKey": {
           "type": "string",
           "default": "",
-          "description": "Optional Groq API key for AI-assisted insights (free tier). Leave empty to use deterministic-only mode."
+          "description": "Firebase Web API key for token refresh (set once during setup)."
         }
       }
     }

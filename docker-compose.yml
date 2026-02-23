@@ -1,0 +1,14 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cursor-session-tracker-backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Mount secrets so cursor.json and service.json are available at runtime
+      - ./backend/secrets:/app/secrets:ro
+    restart: unless-stopped
