@@ -18,6 +18,7 @@ authRouter.get("/google", (req, res) => {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Get Started - Worktrace</title>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -100,8 +101,8 @@ authRouter.get("/google", (req, res) => {
     }
 
     .brand-logo {
-      width: 80px;
-      height: 80px;
+      width: 112px;
+      height: 112px;
       margin-bottom: 32px;
       image-rendering: pixelated;
       filter: drop-shadow(0 0 20px rgba(255,255,255,0.1));
@@ -153,8 +154,8 @@ authRouter.get("/google", (req, res) => {
     }
 
     .form-logo {
-      width: 48px;
-      height: 48px;
+      width: 64px;
+      height: 64px;
       margin-bottom: 24px;
       image-rendering: pixelated;
     }
@@ -327,7 +328,7 @@ authRouter.get("/google", (req, res) => {
       <div class="pixel-grid"></div>
       <div class="glow-orb"></div>
       <div class="brand-content">
-        <img src="/static/icon.png" alt="Worktrace" class="brand-logo" />
+        <img src="/static/logo.svg" alt="Worktrace" class="brand-logo" />
         <p class="brand-tagline">
           Track your code
           <span class="highlight">Welcome to the journey</span>
@@ -338,7 +339,7 @@ authRouter.get("/google", (req, res) => {
     <div class="right-panel">
       <div class="form-card">
         <div class="form-header">
-          <img src="/static/icon.png" alt="Worktrace" class="form-logo" />
+          <img src="/static/logo.svg" alt="Worktrace" class="form-logo" />
           <h1 class="form-title">Get Started</h1>
           <p class="form-subtitle">
             <span class="journey">Welcome to Worktrace</span><br/>
@@ -428,7 +429,7 @@ authRouter.get("/google", (req, res) => {
 
         document.querySelector('.form-card').innerHTML = \`
           <div class="form-header">
-            <img src="/static/icon.png" alt="Worktrace" class="form-logo" />
+            <img src="/static/logo.svg" alt="Worktrace" class="form-logo" />
             <h1 class="form-title" style="color: #27ae60;">Success!</h1>
             <p class="form-subtitle">
               Signed in as <strong>\${user.email || 'user'}</strong>
