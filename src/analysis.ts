@@ -3,10 +3,12 @@ import * as path from "path";
 import {
   SessionData,
   DiffFileSummary,
+  SessionDelta,
   SessionAnalysis,
   ConfidenceLevel,
   WorkIntent,
   FileCategory,
+  CodeChangeSummary,
 } from "./types";
 import { classifyFile, groupFilesByCategory } from "./file-utils";
 import { parseGitDiffByFile } from "./git";
@@ -153,12 +155,17 @@ function detectFrictionPoints(session: SessionData): string[] {
   );
   if (saveEvents.length >= 3) {
     const saveTimes = saveEvents
-      .map((e) => Date.parse(e.timestamp))
-      .sort((a, b) => a - b);
+      .map((e) => ({ time: Date.parse(e.timestamp), file: e.file }))
+      .sort((a, b) => a.time - b.time);
     for (let i = 0; i < saveTimes.length - 2; i++) {
-      if (saveTimes[i + 2] - saveTimes[i] < 60000) {
-        const burstFile = saveEvents[i].file;
-        const msg = `Rapid save burst on \`${path.basename(burstFile)}\` \u2014 suggests trial-and-error.`;
+      const windowMs = saveTimes[i + 2].time - saveTimes[i].time;
+      if (windowMs < 60000) {
+        const burstFile = saveTimes[i].file;
+        const burstCount = saveTimes.filter(
+          (s) => s.time >= saveTimes[i].time && s.time <= saveTimes[i].time + 60000
+        ).length;
+        const windowSec = Math.round(windowMs / 1000);
+        const msg = `Rapid save burst on \`${path.basename(burstFile)}\` (${burstCount} saves in ${windowSec}s) \u2014 suggests trial-and-error.`;
         if (!points.includes(msg)) {
           points.push(msg);
         }
@@ -184,14 +191,23 @@ function detectFrictionPoints(session: SessionData): string[] {
     );
   }
 
-  const allTimestamps = session.fileChangeEvents
-    .map((e) => Date.parse(e.timestamp))
-    .sort((a, b) => a - b);
-  for (let i = 1; i < allTimestamps.length; i++) {
-    const gapMinutes = (allTimestamps[i] - allTimestamps[i - 1]) / 60000;
+  const sortedEvents = [...session.fileChangeEvents].sort(
+    (a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)
+  );
+  for (let i = 1; i < sortedEvents.length; i++) {
+    const gapMinutes =
+      (Date.parse(sortedEvents[i].timestamp) -
+        Date.parse(sortedEvents[i - 1].timestamp)) /
+      60000;
     if (gapMinutes > 10) {
+      const before = path.basename(sortedEvents[i - 1].file);
+      const after = path.basename(sortedEvents[i].file);
+      const context =
+        before === after
+          ? `while working on \`${before}\``
+          : `between \`${before}\` and \`${after}\``;
       points.push(
-        `${Math.round(gapMinutes)}-minute gap detected \u2014 possible debugging or deep thinking.`
+        `${Math.round(gapMinutes)}-minute gap ${context} \u2014 possible debugging or deep thinking.`
       );
       break;
     }
@@ -488,4 +504,70 @@ function rankFilesByImportance(
       file,
       reason: data.reasons.length > 0 ? data.reasons.join("; ") : "touched",
     }));
+}
+
+const FUNCTION_PATTERNS = [
+  /^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/,
+  /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(/,
+  /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>/,
+  /^\s*def\s+(\w+)\s*\(/,
+  /^\s*func\s+(\w+)\s*\(/,
+];
+
+const IMPORT_PATTERNS = [
+  /^\s*import\s+/,
+  /=\s*require\s*\(/,
+  /^\s*from\s+/,
+];
+
+export function summarizeCodeChanges(delta: SessionDelta): CodeChangeSummary[] {
+  const summaries: CodeChangeSummary[] = [];
+
+  const allFiles = [
+    ...delta.created.map((f) => ({
+      file: f.file,
+      addedLines: f.content,
+      linesAdded: f.content.length,
+      linesRemoved: 0,
+    })),
+    ...delta.updated.map((f) => ({
+      file: f.file,
+      addedLines: f.addedLines,
+      linesAdded: f.added,
+      linesRemoved: f.removed,
+    })),
+  ];
+
+  for (const entry of allFiles) {
+    const functionsAdded: string[] = [];
+    let importsChanged = false;
+
+    for (const line of entry.addedLines) {
+      for (const pat of FUNCTION_PATTERNS) {
+        const match = pat.exec(line);
+        if (match && match[1] && !functionsAdded.includes(match[1])) {
+          functionsAdded.push(match[1]);
+          break;
+        }
+      }
+      if (!importsChanged) {
+        for (const pat of IMPORT_PATTERNS) {
+          if (pat.test(line)) {
+            importsChanged = true;
+            break;
+          }
+        }
+      }
+    }
+
+    summaries.push({
+      file: entry.file,
+      linesAdded: entry.linesAdded,
+      linesRemoved: entry.linesRemoved,
+      functionsAdded,
+      importsChanged,
+    });
+  }
+
+  return summaries;
 }

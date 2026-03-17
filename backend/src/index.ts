@@ -7,6 +7,9 @@ import { authRouter } from "./routes/auth";
 import { configRouter } from "./routes/config";
 import { userRouter } from "./routes/user";
 import { cardRouter } from "./routes/card";
+import { logger } from "./logger";
+import { attachRequestContext } from "./middleware/request-context";
+import { errorHandler } from "./middleware/error-handler";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -18,25 +21,23 @@ const firebaseServiceAccountPath =
 try {
   const resolved = path.resolve(firebaseServiceAccountPath);
   if (!fs.existsSync(resolved)) {
-    console.warn(
-      `[WARN] Firebase service account not found at ${resolved}. Running in degraded mode — auth and session routes will return 503.`
-    );
+    logger.warn("Firebase service account not found. Running in degraded mode.", {
+      firebaseServiceAccountPath: resolved,
+    });
   } else {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     initializeApp({ credential: cert(require(resolved)) });
     firebaseReady = true;
-    console.log("[INFO] Firebase initialized successfully.");
+    logger.info("Firebase initialized successfully.");
   }
 } catch (err) {
-  console.error(
-    "[ERROR] Firebase initialization failed:",
-    err instanceof Error ? err.message : err
-  );
-  console.warn("[WARN] Running in degraded mode.");
+  logger.error("Firebase initialization failed.", { error: err });
+  logger.warn("Running in degraded mode.");
 }
 
 const app = express();
 
+app.use(attachRequestContext);
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || "*",
@@ -66,13 +67,12 @@ app.use("/api/auth", firebaseGuard, authRouter);
 app.use("/api/session", firebaseGuard, sessionRouter);
 app.use("/api/user", firebaseGuard, userRouter);
 app.use("/api/card", firebaseGuard, cardRouter);
+app.use(errorHandler);
 
 const port = parseInt(process.env.PORT || "3000", 10);
 app.listen(port, () => {
-  console.log(`Backend running on http://localhost:${port}`);
+  logger.info("Backend server started.", { port });
   if (!firebaseReady) {
-    console.log(
-      "  ⚠  Degraded mode: /api/auth and /api/session return 503"
-    );
+    logger.warn("Degraded mode enabled for Firebase-backed routes.");
   }
 });

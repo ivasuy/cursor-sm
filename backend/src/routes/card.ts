@@ -2,8 +2,8 @@ import { Router, Response } from "express";
 import { getFirestore } from "firebase-admin/firestore";
 import {
   verifyFirebaseToken,
-  AuthenticatedRequest,
 } from "../middleware/auth";
+import { AuthenticatedRequest } from "../request-types";
 import { getSessionsForDate, getUserStreak } from "../services/sessions";
 import { generateCardImage } from "../services/card";
 
@@ -76,6 +76,10 @@ cardRouter.get(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Internal server error";
+      req.log?.error("Generating daily card failed.", {
+        error,
+        uid: req.user?.uid,
+      });
       res.status(500).json({ error: message });
     }
   }
@@ -145,6 +149,10 @@ cardRouter.post(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Internal server error";
+      req.log?.error("Generating custom card failed.", {
+        error,
+        uid: req.user?.uid,
+      });
       res.status(500).json({ error: message });
     }
   }

@@ -150,6 +150,71 @@ function refreshFirebaseIdToken(
   });
 }
 
+export function callBackendContext(
+  session: SessionData,
+  analysis: SessionAnalysis,
+  previousContext: string | null,
+  idToken: string
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+    const backendUrl =
+      config.get<string>("backendUrl") || "http://localhost:3000";
+
+    const payload = JSON.stringify({
+      session: {
+        branch: session.branch,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        filesTouched: session.filesTouched,
+        saveCounts: session.saveCounts,
+        fileChangeEvents: session.fileChangeEvents,
+        gitDiff: session.gitDiff,
+      },
+      analysis,
+      previousContext,
+    });
+
+    const parsed = new URL(`${backendUrl}/api/session/context`);
+    const isHttps = parsed.protocol === "https:";
+    const lib = isHttps ? https : http;
+
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || (isHttps ? "443" : "80"),
+      path: parsed.pathname,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+        "Content-Length": String(Buffer.byteLength(payload)),
+      },
+      timeout: 30000,
+    };
+
+    const req = lib.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk: string) => (data += chunk));
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(data);
+          resolve(json.context || null);
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.write(payload);
+    req.end();
+  });
+}
+
 export function callBackendSummarize(
   session: SessionData,
   analysis: SessionAnalysis,

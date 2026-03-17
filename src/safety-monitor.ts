@@ -35,7 +35,10 @@ export function runSafetyCheck(diffSummaries: DiffFileSummary[]): SafetyWarning[
   const unsafeCodePatterns = buildUnsafePatterns();
 
   for (const diff of diffSummaries) {
-    for (const line of diff.addedLines) {
+    for (let i = 0; i < diff.addedLines.length; i++) {
+      const line = diff.addedLines[i];
+      const contextSlice = diff.addedLines.slice(Math.max(0, i - 2), i + 3);
+
       for (const { pattern, label } of SECRET_PATTERNS) {
         if (pattern.test(line)) {
           warnings.push({
@@ -44,6 +47,8 @@ export function runSafetyCheck(diffSummaries: DiffFileSummary[]): SafetyWarning[
             message: `Possible ${label} detected in added code`,
             file: diff.file,
             line: line.trim().slice(0, 80),
+            lineIndex: i,
+            context: contextSlice,
           });
         }
       }
@@ -56,6 +61,8 @@ export function runSafetyCheck(diffSummaries: DiffFileSummary[]): SafetyWarning[
             message: label,
             file: diff.file,
             line: line.trim().slice(0, 80),
+            lineIndex: i,
+            context: contextSlice,
           });
         }
       }

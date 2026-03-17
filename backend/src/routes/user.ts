@@ -2,8 +2,8 @@ import { Router, Response } from "express";
 import { getFirestore } from "firebase-admin/firestore";
 import {
   verifyFirebaseToken,
-  AuthenticatedRequest,
 } from "../middleware/auth";
+import { AuthenticatedRequest } from "../request-types";
 
 export const userRouter = Router();
 
@@ -43,6 +43,10 @@ userRouter.post(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Internal server error";
+      req.log?.error("User registration failed.", {
+        error,
+        uid: req.user?.uid,
+      });
       res.status(500).json({ error: message });
     }
   }
@@ -75,6 +79,10 @@ userRouter.get(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Internal server error";
+      req.log?.error("Fetching user profile failed.", {
+        error,
+        uid: req.user?.uid,
+      });
       res.status(500).json({ error: message });
     }
   }
@@ -112,6 +120,10 @@ userRouter.patch(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Internal server error";
+      req.log?.error("Updating user profile failed.", {
+        error,
+        uid: req.user?.uid,
+      });
       res.status(500).json({ error: message });
     }
   }
