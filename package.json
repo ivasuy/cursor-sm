@@ -1,8 +1,8 @@
 {
-  "name": "cursor-session-tracker",
-  "displayName": "Cursor Session Tracker",
-  "description": "Track workspace session changes and generate summaries.",
-  "version": "0.1.0",
+  "name": "worktrace",
+  "displayName": "Worktrace",
+  "description": "The operating system for AI-assisted development — session tracking, safety monitoring, and proof of work.",
+  "version": "0.2.0",
   "publisher": "local",
   "icon": "icon.png",
   "repository": {
@@ -22,47 +22,64 @@
   "contributes": {
     "commands": [
       {
-        "command": "cursorSessionTracker.endSession",
-        "title": "End Session & Generate Summary"
+        "command": "worktrace.endSession",
+        "title": "Worktrace: End Session & Generate Summary"
       },
       {
-        "command": "cursorSessionTracker.addSessionNote",
-        "title": "Add Session Note"
+        "command": "worktrace.addSessionNote",
+        "title": "Worktrace: Add Session Note"
       },
       {
-        "command": "cursorSessionTracker.signIn",
-        "title": "Session Tracker: Sign In with Google"
+        "command": "worktrace.signIn",
+        "title": "Worktrace: Sign In with Google"
       },
       {
-        "command": "cursorSessionTracker.signOut",
-        "title": "Session Tracker: Sign Out"
+        "command": "worktrace.signOut",
+        "title": "Worktrace: Sign Out"
       },
       {
-        "command": "cursorSessionTracker.setDisplayName",
-        "title": "Session Tracker: Set Display Name"
+        "command": "worktrace.setDisplayName",
+        "title": "Worktrace: Set Display Name"
       },
       {
-        "command": "cursorSessionTracker.generateCard",
-        "title": "Session Tracker: Generate Shareable Card"
+        "command": "worktrace.generateCard",
+        "title": "Worktrace: Generate Shareable Card"
+      },
+      {
+        "command": "worktrace.runSafetyCheck",
+        "title": "Worktrace: Run Safety Check"
+      },
+      {
+        "command": "worktrace.showContext",
+        "title": "Worktrace: Show Session Context"
+      },
+      {
+        "command": "worktrace.searchHistory",
+        "title": "Worktrace: Search Session History"
       }
     ],
     "configuration": {
-      "title": "Cursor Session Tracker",
+      "title": "Worktrace",
       "properties": {
-        "cursorSessionTracker.backendUrl": {
+        "worktrace.backendUrl": {
           "type": "string",
           "default": "http://localhost:3000",
           "description": "Backend API URL for AI-powered summaries."
         },
-        "cursorSessionTracker.firebaseApiKey": {
+        "worktrace.firebaseApiKey": {
           "type": "string",
           "default": "",
           "description": "Firebase Web API key for token refresh (set once during setup)."
         },
-        "cursorSessionTracker.displayName": {
+        "worktrace.displayName": {
           "type": "string",
           "default": "",
           "description": "Your display name shown on shareable session cards."
+        },
+        "worktrace.safetyMonitor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable real-time safety monitoring for AI-generated code changes."
         }
       }
     }

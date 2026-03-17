@@ -425,7 +425,7 @@ authRouter.get("/google", (req, res) => {
           userId: user.uid,
         });
 
-        const callbackUrl = scheme + '://local.cursor-session-tracker/auth-callback?' + params.toString();
+        const callbackUrl = scheme + '://local.worktrace/auth-callback?' + params.toString();
 
         document.querySelector('.form-card').innerHTML = \`
           <div class="form-header">

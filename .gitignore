@@ -1,6 +1,7 @@
 node_modules/
 dist/
-.cursor-sessions/
+sessions/
+.worktrace/
 *.vsix
 .env
 
