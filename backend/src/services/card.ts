@@ -107,17 +107,29 @@ function getIconDataUri(): string {
 
 function buildCardSvg(data: CardData): string {
   const W = 840;
-  const H = 640;
-  const pad = 32;
-  const outerR = 24;
-  const F = "'Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif";
-  const P = "'Press Start 2P',ui-monospace,'Courier New',monospace";
+  // H will be computed after layout
 
-  const iconDataUri = getIconDataUri();
+  const MONO = "'JetBrains Mono','Fira Code','SF Mono','Menlo',monospace";
+
+  // Terminal palette
+  const BG = "#0d1117";
+  const BG_TITLE = "#161b22";
+  const BORDER = "#30363d";
+  const GREEN = "#3fb950";
+  const RED = "#f85149";
+  const BLUE = "#58a6ff";
+  const AMBER = "#d29922";
+  const CYAN = "#39d353";
+  const PURPLE = "#bc8cff";
+  const WHITE = "#f0f6fc";
+  const MUTED = "#8b949e";
+  const DIM = "#484f58";
+  const FAINT = "#21262d";
+
+  const safeName = clampText(data.displayName || "dev", 16);
+  const branchRaw = data.branch?.trim() || "main";
+  const branchStr = clampText(branchRaw, 24);
   const dateStr = formatDate(data.date);
-  const safeNameRaw = clampText(data.displayName || "developer", 18);
-  const titleText = escapeXml(`${safeNameRaw}'s Session`.toUpperCase());
-  const branchRaw = data.branch?.trim() ? data.branch.trim() : "main";
 
   const addStr = `+${formatNumber(data.linesAdded)}`;
   const remStr = `-${formatNumber(data.linesRemoved)}`;
@@ -126,217 +138,259 @@ function buildCardSvg(data: CardData): string {
     ? `${Math.round(data.durationMins)}m`
     : `${formatNumber(data.streak)}d`;
   const streakLabel = data.durationMins != null && data.durationMins > 0
-    ? "Session Time"
-    : "Streak";
+    ? "time" : "streak";
 
   const readinessScore =
     data.readinessScore != null && Number.isFinite(data.readinessScore)
       ? Math.max(0, Math.min(100, Math.round(data.readinessScore)))
       : null;
-  const readinessMain = readinessScore != null ? String(readinessScore) : "N/A";
-  const readinessSuffix = readinessScore != null ? "/100" : "";
+
+  const modeRaw = data.sessionMode
+    ? data.sessionMode.replace(/-/g, " ")
+    : "";
+  // Avoid "session — session" redundancy
+  const modeStr = modeRaw === "session" ? "" : modeRaw;
 
   const descriptionRaw =
     data.shareableUpdate?.trim() ||
-    `Daily coding summary for ${safeNameRaw}. ${addStr} lines added, ${remStr} lines removed, ${filesStr} files changed on ${branchRaw}.`;
-  const descriptionLines = wrapTextLines(descriptionRaw, 72, 4);
+    `${addStr} lines added, ${remStr} removed across ${filesStr} files.`;
+  const descriptionLines = wrapTextLines(descriptionRaw, 72, 3);
 
-  const topFileText =
-    data.topFiles && data.topFiles.length > 0
-      ? `Top file: ${fileBaseName(data.topFiles[0])}`
-      : dateStr;
-  const footerLeft = escapeXml(clampText(topFileText, 38));
+  const shipLabel = data.shipDecision === "ship" ? "SHIP"
+    : data.shipDecision === "split" ? "SPLIT"
+    : data.shipDecision === "stabilize" ? "HOLD"
+    : null;
+  const shipColor = data.shipDecision === "ship" ? GREEN
+    : data.shipDecision === "split" ? AMBER
+    : data.shipDecision === "stabilize" ? RED
+    : DIM;
 
-  const cardX = 92;
-  const cardY = 52;
-  const cardW = W - cardX * 2;
-  const cardH = 536;
-  const cardR = 20;
-  const shadowOffset = 12;
-  const headerH = 96;
-  const bodyX = cardX + 28;
-  const bodyW = cardW - 56;
-  const descStartY = cardY + headerH + 38;
-  const descLineH = 24;
-  const descBlockH = descLineH * 4;
+  const readinessColor = readinessScore != null
+    ? readinessScore >= 80 ? GREEN
+      : readinessScore >= 50 ? AMBER
+      : RED
+    : DIM;
 
-  const gridGap = 14;
-  const featureW = Math.floor((bodyW - gridGap) / 2);
-  const featureH = 84;
-  const gridY = descStartY + descBlockH + 20;
+  // Layout — content-driven height
+  const PAD = 20;
+  const titleBarH = 38;
+  const termX = PAD;
+  const termY = PAD;
+  const termW = W - PAD * 2;
+  const termR = 12;
+  const cx = termX + 30;
+  const cr = termX + termW - 30;
 
-  const actionY = gridY + featureH * 2 + gridGap + 22;
+  // 4-column center positions for metrics (each col = 25% of box width)
+  const contentW = cr - cx;
+  const colMid1 = cx + contentW * 0.125;
+  const colMid2 = cx + contentW * 0.375;
+  const colMid3 = cx + contentW * 0.625;
+  const colMid4 = cx + contentW * 0.875;
 
-  const logoX = cardX + 20;
-  const logoY = cardY + 22;
-  const logoSize = 50;
+  // Net change bar
+  const netTotal = data.linesAdded + data.linesRemoved;
+  const barLen = 36;
+  const addFilled = Math.round((data.linesAdded / Math.max(netTotal, 1)) * barLen);
+  const addBarPart = "\u2588".repeat(addFilled);
+  const remBarPart = "\u2588".repeat(barLen - addFilled);
 
-  const featureItems: Array<{
-    label: string;
-    value: string;
-    iconPath: string;
-    color: string;
-    valueColor: string;
-  }> = [
-    {
-      label: "Lines Added",
-      value: addStr,
-      iconPath:
-        "M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
-      color: "#22863a",
-      valueColor: "#22863a",
-    },
-    {
-      label: "Lines Removed",
-      value: remStr,
-      iconPath:
-        "M15 12H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
-      color: "#cb2431",
-      valueColor: "#cb2431",
-    },
-    {
-      label: "Files Changed",
-      value: filesStr,
-      iconPath:
-        "M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2Z",
-      color: "#4d61ff",
-      valueColor: "#4d61ff",
-    },
-    {
-      label: streakLabel,
-      value: streakValue,
-      iconPath:
-        "M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z",
-      color: "#f59e0b",
-      valueColor: "#f59e0b",
-    },
-  ];
+  // Readiness bar
+  const readyBarLen = 24;
+  const readyFilled = readinessScore != null ? Math.round(readinessScore / 100 * readyBarLen) : 0;
+  const readyBarFull = "\u2588".repeat(readyFilled);
+  const readyBarEmpty = "\u2591".repeat(readyBarLen - readyFilled);
 
-  const featuresSvg = featureItems
-    .map((item, index) => {
-      const col = index % 2;
-      const row = Math.floor(index / 2);
-      const x = bodyX + col * (featureW + gridGap);
-      const y = gridY + row * (featureH + gridGap);
-      const iconY = y + (featureH - 36) / 2 - 12;
-      const textCenterY = y + featureH / 2;
-      return `
-      <g>
-        <rect x="${x}" y="${y}" rx="10" ry="10" width="${featureW}" height="${featureH}" fill="#ffffff" stroke="#d5d1c8" stroke-width="2"/>
-        <rect x="${x + 14}" y="${iconY}" rx="6" ry="6" width="36" height="36" fill="${item.color}"/>
-        <svg x="${x + 20}" y="${iconY + 6}" width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="${item.iconPath}" stroke="#f8f7f2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <text x="${x + 62}" y="${textCenterY - 4}" fill="${item.valueColor}" font-size="26" font-weight="800" font-family="${F}">${escapeXml(item.value)}</text>
-        <text x="${x + 62}" y="${textCenterY + 18}" fill="#6f6a60" font-size="9" letter-spacing="1.2" font-family="${P}">${escapeXml(item.label.toUpperCase())}</text>
-      </g>`;
-    })
-    .join("");
+  // Top files
+  const topFiles = data.topFiles
+    ? data.topFiles.slice(0, 5).map((f) => fileBaseName(f))
+    : [];
 
-  const descriptionSvg = descriptionLines
-    .map(
-      (line, i) =>
-        `<text x="${bodyX + bodyW / 2}" y="${descStartY + i * descLineH}" text-anchor="middle" fill="#2b2b2b" font-size="16" font-weight="500" font-family="${F}">${escapeXml(line)}</text>`
-    )
-    .join("");
+  // Confidence text
+  const confText = readinessScore != null
+    ? readinessScore >= 80 ? "high confidence \u2014 looks shippable"
+      : readinessScore >= 50 ? "medium confidence \u2014 needs review"
+      : "low confidence \u2014 work in progress"
+    : null;
 
-  const logoSvg = iconDataUri
-    ? `<image href="${iconDataUri}" x="${logoX + 7}" y="${logoY + 7}" width="${logoSize - 14}" height="${logoSize - 14}" preserveAspectRatio="xMidYMid meet"/>`
-    : `<text x="${logoX + logoSize / 2}" y="${logoY + 34}" text-anchor="middle" fill="#f5c542" font-size="22" font-weight="700" font-family="${F}">&#9733;</text>`;
+  // Duration text
+  const durationText = data.durationMins != null && data.durationMins > 0
+    ? data.durationMins >= 60
+      ? `${Math.floor(data.durationMins / 60)}h ${data.durationMins % 60}m session`
+      : `${data.durationMins}m session`
+    : data.streak > 0 ? `${data.streak} day streak` : null;
+
+  // --- Flow-based Y positions — content drives height ---
+  const SP = 4; // tight spacing between lines within a group
+  const GP = 10; // spacing between groups/sections
+
+  let curY = termY + titleBarH + 22;
+  function at(lineH: number): number { const y = curY; curY += lineH; return y; }
+  function skip(n: number = GP) { curY += n; }
+
+  const y0 = at(18); skip(GP);                   // $ command
+  const yNameDate = at(14); skip(GP);            // centered name + date
+  const yBoxTop = curY; skip(16);               // box top edge (padding inside)
+  const yLabels = at(12); skip(14);             // metric labels (big gap to values)
+  const yValues = at(16); skip(10);             // metric values
+  const yNetBar = at(16); skip(10);             // net bar
+  const yBoxBot = curY; skip(GP);               // box bottom edge
+
+  const yUpdateLabel = at(16); skip(2);         // ▶ update label
+  const yUpdateStart = curY;
+  curY += descriptionLines.length * 18;
+  skip(GP);                                     // update text
+
+  let yFiles = curY;
+  if (topFiles.length > 0) { yFiles = at(18); skip(GP); }
+
+  let yReady = curY;
+  if (readinessScore != null) { yReady = at(18); skip(SP); }
+
+  let yConf = curY;
+  if (confText) { yConf = at(16); skip(SP); }
+
+  let yDuration = curY;
+  if (durationText) { yDuration = at(16); skip(GP); }
+
+  // Separator line, then cursor + "powered by" on same line
+  const ySep = at(10); skip(6);
+  const yCursor = at(16);
+
+  // Now compute H from content
+  const termH = (curY + PAD + 8) - termY;
+  const H = termH + PAD * 2;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <defs>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&amp;family=Inter:wght@400;500;600;700;800;900&amp;display=swap');
-    text { font-family: ${F}; }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&amp;display=swap');
   </style>
-  <clipPath id="outer"><rect width="${W}" height="${H}" rx="${outerR}"/></clipPath>
-  <clipPath id="cardClip"><rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="${cardR}"/></clipPath>
-  <clipPath id="cardBodyClip"><rect x="${cardX}" y="${cardY + headerH}" width="${cardW}" height="${cardH - headerH}"/></clipPath>
-  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stop-color="#0a0a0a"/>
-    <stop offset="100%" stop-color="#0e0e0e"/>
-  </linearGradient>
-  <radialGradient id="orb" cx="0%" cy="100%" r="80%">
-    <stop offset="0%" stop-color="#666666" stop-opacity="0.14"/>
-    <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+  <clipPath id="outer"><rect width="${W}" height="${H}" rx="16"/></clipPath>
+  <clipPath id="term"><rect x="${termX}" y="${termY}" width="${termW}" height="${termH}" rx="${termR}"/></clipPath>
+  <pattern id="scan" width="2" height="4" patternUnits="userSpaceOnUse">
+    <rect width="2" height="1" fill="#ffffff" opacity="0.01"/>
+  </pattern>
+  <radialGradient id="glow" cx="50%" cy="30%" r="60%">
+    <stop offset="0%" stop-color="${GREEN}" stop-opacity="0.012"/>
+    <stop offset="100%" stop-color="${BG}" stop-opacity="0"/>
   </radialGradient>
-  <pattern id="sceneGrid" width="24" height="24" patternUnits="userSpaceOnUse">
-    <path d="M24 0H0V24" fill="none" stroke="#ffffff" stroke-opacity="0.03" stroke-width="1"/>
-  </pattern>
-  <pattern id="cardPatternGrid" width="10" height="10" patternUnits="userSpaceOnUse">
-    <path d="M10 0H0V10" fill="none" stroke="#000000" stroke-opacity="0.06" stroke-width="1"/>
-  </pattern>
-  <pattern id="cardPatternDots" width="16" height="16" patternUnits="userSpaceOnUse">
-    <circle cx="3" cy="3" r="1.2" fill="#cfcfcf"/>
-  </pattern>
 </defs>
+
 <g clip-path="url(#outer)">
-  <rect width="${W}" height="${H}" fill="url(#bg)"/>
-  <rect width="${W}" height="${H}" fill="url(#sceneGrid)"/>
-  <circle cx="120" cy="${H - 30}" r="180" fill="url(#orb)"/>
+  <rect width="${W}" height="${H}" fill="#010409"/>
 
-  <!-- Background decorative shapes -->
-  <rect x="45" y="180" width="52" height="52" fill="#4d61ff" opacity="0.6" transform="rotate(45 71 206)"/>
-  <rect x="28" y="420" width="38" height="38" fill="#f8f7f2" opacity="0.7" transform="rotate(-12 47 439)"/>
-  <rect x="${W - 70}" y="100" width="36" height="36" fill="#00e0b0" opacity="0.5" transform="rotate(30 ${W - 52} 118)"/>
-  <rect x="${W - 55}" y="${H - 140}" width="44" height="44" fill="#f5c542" opacity="0.5" transform="rotate(45 ${W - 33} ${H - 118})"/>
-  <rect x="60" y="${H - 100}" width="28" height="28" fill="#4d61ff" opacity="0.4" transform="rotate(20 74 ${H - 86})"/>
-  <rect x="${W - 90}" y="320" width="24" height="24" fill="#f8f7f2" opacity="0.5" transform="rotate(-8 ${W - 78} 332)"/>
-  <rect x="35" y="80" width="18" height="18" fill="#00e0b0" opacity="0.35" transform="rotate(45 44 89)"/>
-  <rect x="${W - 45}" y="480" width="20" height="20" fill="#cb2431" opacity="0.3" transform="rotate(15 ${W - 35} 490)"/>
+  <!-- Terminal window -->
+  <rect x="${termX}" y="${termY}" width="${termW}" height="${termH}" rx="${termR}" fill="${BG}" stroke="${BORDER}" stroke-width="1"/>
+  <rect x="${termX}" y="${termY}" width="${termW}" height="${titleBarH}" fill="${BG_TITLE}" clip-path="url(#term)"/>
+  <line x1="${termX}" y1="${termY + titleBarH}" x2="${termX + termW}" y2="${termY + titleBarH}" stroke="${BORDER}" stroke-width="1"/>
 
-  <rect x="${cardX + shadowOffset}" y="${cardY + shadowOffset}" width="${cardW}" height="${cardH}" rx="${cardR}" ry="${cardR}" fill="#000000"/>
-  <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="${cardR}" ry="${cardR}" fill="#f8f7f2" stroke="#d5d1c8" stroke-width="2" stroke-linejoin="round"/>
-  <rect x="${cardX}" y="${cardY + headerH}" width="${cardW}" height="${cardH - headerH}" fill="url(#cardPatternGrid)" clip-path="url(#cardBodyClip)" opacity="0.45"/>
-  <rect x="${cardX}" y="${cardY + headerH}" width="${cardW}" height="${cardH - headerH}" fill="url(#cardPatternDots)" clip-path="url(#cardBodyClip)" opacity="0.2"/>
+  <!-- Traffic lights -->
+  <circle cx="${termX + 22}" cy="${termY + titleBarH / 2}" r="6" fill="${RED}" opacity="0.85"/>
+  <circle cx="${termX + 40}" cy="${termY + titleBarH / 2}" r="6" fill="${AMBER}" opacity="0.85"/>
+  <circle cx="${termX + 58}" cy="${termY + titleBarH / 2}" r="6" fill="${CYAN}" opacity="0.85"/>
 
-  <rect x="${cardX + cardW - 24}" y="${cardY - 22}" width="72" height="72" fill="#f5c542" transform="rotate(45 ${cardX + cardW + 12} ${cardY + 14})"/>
-  <text x="${cardX + cardW - 16}" y="${cardY + 26}" fill="#111111" font-size="20" font-weight="800" font-family="${F}">&#9733;</text>
+  <!-- Title -->
+  <text x="${W / 2}" y="${termY + titleBarH / 2 + 4}" text-anchor="middle" fill="${MUTED}" font-size="12" font-family="${MONO}">${escapeXml(safeName)}@worktrace: ~/${escapeXml(branchStr)}</text>
 
-  <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${headerH}" fill="#121210" clip-path="url(#cardClip)"/>
-  <line x1="${cardX}" y1="${cardY + headerH}" x2="${cardX + cardW}" y2="${cardY + headerH}" stroke="#d5d1c8" stroke-width="1"/>
-  <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="${cardR}" ry="${cardR}" fill="none" stroke="#d5d1c8" stroke-width="2"/>
+  <!-- CRT overlay -->
+  <rect x="${termX}" y="${termY + titleBarH}" width="${termW}" height="${termH - titleBarH}" fill="url(#scan)" clip-path="url(#term)"/>
+  <rect x="${termX}" y="${termY}" width="${termW}" height="${termH}" fill="url(#glow)" clip-path="url(#term)"/>
 
-  <rect x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" rx="10" ry="10" fill="#0d0d0d" stroke="#f5c542" stroke-width="2"/>
-  ${logoSvg}
-
-  <text x="${logoX + logoSize + 16}" y="${cardY + 52}" fill="#ffffff" font-size="24" font-weight="800" font-family="${F}">${titleText}</text>
-  <text x="${logoX + logoSize + 16}" y="${cardY + 76}" fill="#9b988f" font-size="11" letter-spacing="1.2" font-family="${P}">${escapeXml(dateStr.toUpperCase())}</text>
-
-  ${descriptionSvg}
-  ${featuresSvg}
-
-  <line x1="${bodyX}" y1="${actionY}" x2="${bodyX + bodyW}" y2="${actionY}" stroke="#000000" stroke-opacity="0.16" stroke-width="2" stroke-dasharray="7 7"/>
-  <text x="${bodyX + bodyW / 2}" y="${actionY + 4}" text-anchor="middle" fill="#7a756d" font-size="20" font-family="${F}">&#9986;</text>
-
-  <rect x="${bodyX}" y="${actionY + 50}" width="92" height="10" fill="#00e0b0" opacity="0.45"/>
-  <text x="${bodyX}" y="${actionY + 48}" fill="#111111" font-size="46" font-weight="900" font-family="${F}">
-    <tspan>${escapeXml(readinessMain)}</tspan>
-    <tspan dx="4" font-size="18" fill="#6f6a60">${escapeXml(readinessSuffix)}</tspan>
+  <!-- ===== COMMAND ===== -->
+  <text x="${cx}" y="${y0}" font-size="13" font-family="${MONO}">
+    <tspan fill="${GREEN}">$</tspan>
+    <tspan fill="${WHITE}" dx="8">worktrace report</tspan>
+    <tspan fill="${MUTED}"> --branch=${escapeXml(branchStr)}</tspan>
   </text>
-  <text x="${bodyX}" y="${actionY + 74}" fill="#6f6a60" font-size="10" letter-spacing="1.3" font-family="${P}">READINESS SCORE</text>
 
-  <g opacity="0.3" transform="translate(${cardX - 14} ${cardY + cardH - 124}) rotate(-10)">
-    <circle fill="#000000" r="3" cy="10" cx="10"/>
-    <circle fill="#000000" r="3" cy="10" cx="30"/>
-    <circle fill="#000000" r="3" cy="10" cx="50"/>
-    <circle fill="#000000" r="3" cy="10" cx="70"/>
-    <circle fill="#000000" r="3" cy="20" cx="20"/>
-    <circle fill="#000000" r="3" cy="20" cx="40"/>
-    <circle fill="#000000" r="3" cy="20" cx="60"/>
-    <circle fill="#000000" r="3" cy="30" cx="10"/>
-    <circle fill="#000000" r="3" cy="30" cx="30"/>
-    <circle fill="#000000" r="3" cy="30" cx="50"/>
-    <circle fill="#000000" r="3" cy="30" cx="70"/>
-  </g>
+  <!-- ===== NAME + DATE (centered) ===== -->
+  <text x="${(cx + cr) / 2}" y="${yNameDate}" text-anchor="middle" font-size="12" font-family="${MONO}">
+    <tspan fill="${CYAN}">${escapeXml(safeName)}</tspan>
+    <tspan fill="${DIM}"> \u2014 ${escapeXml(dateStr)}${modeStr ? ` \u2014 ${escapeXml(modeStr)}` : ""}</tspan>
+  </text>
 
-  <rect x="${bodyX}" y="${descStartY + descBlockH + 6}" width="${bodyW}" height="2" fill="#121210" opacity="0.08"/>
-  <circle cx="${bodyX + 8}" cy="${actionY + 42}" r="6" fill="#4d61ff" opacity="0.18"/>
-  <rect x="${cardX + cardW - 36}" y="${cardY + cardH - 96}" width="24" height="6" rx="3" ry="3" fill="#f5c542" opacity="0.2"/>
+  <!-- ===== SESSION BOX (SVG rect) ===== -->
+  <rect x="${cx}" y="${yBoxTop}" width="${cr - cx}" height="${yBoxBot - yBoxTop}" rx="4" fill="none" stroke="${DIM}" stroke-width="1"/>
 
-  <text x="${pad}" y="${H - 18}" fill="#5f5f5f" font-size="11" font-weight="500" font-family="${F}">${footerLeft}</text>
-  <text x="${W - pad}" y="${H - 18}" fill="#5f5f5f" font-size="11" font-weight="500" text-anchor="end" font-family="${F}">powered by &#9733; Worktrace</text>
+  <!-- Metric labels (centered in each column) -->
+  <text x="${colMid1}" y="${yLabels}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="${MUTED}">added</text>
+  <text x="${colMid2}" y="${yLabels}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="${MUTED}">removed</text>
+  <text x="${colMid3}" y="${yLabels}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="${MUTED}">files</text>
+  <text x="${colMid4}" y="${yLabels}" text-anchor="middle" font-size="10" font-family="${MONO}" fill="${MUTED}">${escapeXml(streakLabel)}</text>
+
+  <!-- Metric values (centered under labels) -->
+  <text x="${colMid1}" y="${yValues}" text-anchor="middle" font-size="15" font-weight="700" font-family="${MONO}" fill="${GREEN}">${escapeXml(addStr)}</text>
+  <text x="${colMid2}" y="${yValues}" text-anchor="middle" font-size="15" font-weight="700" font-family="${MONO}" fill="${RED}">${escapeXml(remStr)}</text>
+  <text x="${colMid3}" y="${yValues}" text-anchor="middle" font-size="15" font-weight="700" font-family="${MONO}" fill="${BLUE}">${escapeXml(filesStr)}</text>
+  <text x="${colMid4}" y="${yValues}" text-anchor="middle" font-size="15" font-weight="700" font-family="${MONO}" fill="${AMBER}">${escapeXml(streakValue)}</text>
+
+  <!-- Net change bar -->
+  <text x="${cx + 14}" y="${yNetBar}" font-size="10" font-family="${MONO}" fill="${MUTED}">net </text>
+  <text x="${cx + 46}" y="${yNetBar}" font-size="11" font-family="${MONO}" fill="${GREEN}">${escapeXml(addBarPart)}</text>
+  <text x="${cx + 46 + addFilled * 7.2}" y="${yNetBar}" font-size="11" font-family="${MONO}" fill="${RED}">${escapeXml(remBarPart)}</text>
+  <text x="${cx + 46 + barLen * 7.2 + 8}" y="${yNetBar}" font-size="10" font-family="${MONO}" fill="${MUTED}">${Math.round((data.linesAdded / Math.max(netTotal, 1)) * 100)}% add</text>
+
+  <!-- ===== UPDATE ===== -->
+  <text x="${cx}" y="${yUpdateLabel}" font-size="11" font-family="${MONO}">
+    <tspan fill="${PURPLE}">\u25B6</tspan>
+    <tspan fill="${MUTED}" dx="6">update</tspan>
+  </text>
+  ${descriptionLines.map((line, i) =>
+    `<text x="${cx + 20}" y="${yUpdateStart + i * 18}" font-size="12.5" font-family="${MONO}" fill="${WHITE}">${escapeXml(line)}</text>`
+  ).join("\n  ")}
+
+  <!-- ===== FILES ===== -->
+  ${topFiles.length > 0 ? `
+  <text x="${cx}" y="${yFiles}" font-size="11" font-family="${MONO}">
+    <tspan fill="${PURPLE}">\u25B6</tspan>
+    <tspan fill="${MUTED}" dx="6">files</tspan>
+    ${topFiles.map((f) =>
+      `<tspan fill="${BLUE}" dx="10">${escapeXml(clampText(f, 18))}</tspan>`
+    ).join("")}
+  </text>
+  ` : ""}
+
+  <!-- ===== READINESS ===== -->
+  ${readinessScore != null ? `
+  <text x="${cx}" y="${yReady}" font-size="11" font-family="${MONO}">
+    <tspan fill="${PURPLE}">\u25B6</tspan>
+    <tspan fill="${MUTED}" dx="6">ready</tspan>
+  </text>
+  <text x="${cx + 80}" y="${yReady}" font-size="11" font-family="${MONO}" fill="${readinessColor}">${escapeXml(readyBarFull)}</text>
+  <text x="${cx + 80 + readyFilled * 7}" y="${yReady}" font-size="11" font-family="${MONO}" fill="${FAINT}">${escapeXml(readyBarEmpty)}</text>
+  <text x="${cx + 80 + readyBarLen * 7 + 10}" y="${yReady}" font-size="16" font-weight="700" font-family="${MONO}" fill="${readinessColor}">${readinessScore}</text>
+  <text x="${cx + 80 + readyBarLen * 7 + 10 + String(readinessScore).length * 10 + 2}" y="${yReady}" font-size="11" font-family="${MONO}" fill="${DIM}">/100</text>
+  ${shipLabel ? `<text x="${cx + 80 + readyBarLen * 7 + 10 + String(readinessScore).length * 10 + 40}" y="${yReady}" font-size="11" font-weight="700" font-family="${MONO}" fill="${shipColor}">[${escapeXml(shipLabel)}]</text>` : ""}
+  ` : ""}
+
+  <!-- ===== CONFIDENCE ===== -->
+  ${confText ? `
+  <text x="${cx}" y="${yConf}" font-size="11" font-family="${MONO}">
+    <tspan fill="${PURPLE}">\u25B6</tspan>
+    <tspan fill="${MUTED}" dx="6">status</tspan>
+    <tspan fill="${readinessColor}" dx="8">${escapeXml(confText)}</tspan>
+  </text>
+  ` : ""}
+
+  <!-- ===== DURATION / STREAK ===== -->
+  ${durationText ? `
+  <text x="${cx}" y="${yDuration}" font-size="11" font-family="${MONO}">
+    <tspan fill="${PURPLE}">\u25B6</tspan>
+    <tspan fill="${MUTED}" dx="6">uptime</tspan>
+    <tspan fill="${AMBER}" dx="8">${escapeXml(durationText)}</tspan>
+  </text>
+  ` : ""}
+
+  <!-- ===== BOTTOM SEPARATOR (full width line) ===== -->
+  <line x1="${cx}" y1="${ySep}" x2="${cr}" y2="${ySep}" stroke="${DIM}" stroke-width="1"/>
+
+  <!-- ===== CURSOR + powered by (same line, typed style, evenly spaced) ===== -->
+  <text x="${cx}" y="${yCursor}" font-size="13" font-family="${MONO}" fill="${GREEN}">$</text>
+  <text x="${cx + 20}" y="${yCursor}" font-size="13" font-family="${MONO}" fill="${MUTED}">powered by</text>
+  <text x="${cx + 106}" y="${yCursor}" font-size="13" font-family="${MONO}" fill="${CYAN}">worktrace</text>
+  <text x="${cx + 182}" y="${yCursor}" font-size="13" font-family="${MONO}" fill="${GREEN}">\u2588</text>
+
 </g>
 </svg>`;
 }
@@ -344,7 +398,7 @@ function buildCardSvg(data: CardData): string {
 export async function generateCardImage(data: CardData): Promise<Buffer> {
   const svg = buildCardSvg(data);
   const png = await sharp(Buffer.from(svg))
-    .resize(1200, 914)
+    .resize({ width: 1200 })
     .png()
     .toBuffer();
   return png;

@@ -1,179 +1,139 @@
 # Architecture
 
-## System Overview
+This document describes the architecture that exists in the repo today. The bigger platform in `product-pivot.md` includes a future local agent, CLI, and provider-usage intelligence, but those parts are not implemented yet.
+
+## Current System Topology
 
 ```mermaid
 graph TB
     subgraph "VS Code / Cursor"
-        EXT[Extension<br/>src/extension.ts]
-        FS[File System Watchers]
+        EXT[Worktrace Extension]
+        FS[Workspace Events]
         GIT[Git CLI]
-        SS[SecretStorage]
-        WS[WorkspaceState]
+        SS[SecretStorage + WorkspaceState]
+        OUT[sessions/ + .worktrace/]
     end
 
-    subgraph "Backend Server"
+    subgraph "Optional Backend"
         API[Express API]
-        AUTH[Auth Middleware]
-        CFG[Config Route]
-        SES[Session Route]
-        VTX[Vertex AI Service]
-        USG[Usage Service]
+        AUTH[Google Auth + Firebase Admin]
+        SES[Session + Context Routes]
+        CARD[Card + User Routes]
+        USG[Usage Tracking]
     end
 
     subgraph "Google Cloud"
-        FA[Firebase Auth]
         FDB[Firestore]
-        VAI[Vertex AI<br/>Gemini 2.5]
+        VAI[Vertex AI]
     end
 
-    FS -->|file events| EXT
-    GIT -->|diff, branch| EXT
-    EXT -->|tokens| SS
-    EXT -->|notes| WS
-    EXT -->|POST /api/session/summarize| SES
-    EXT -->|GET /api/config| CFG
-    SES --> AUTH
-    AUTH -->|verify token| FA
-    SES --> VTX
-    VTX -->|generate| VAI
-    SES --> USG
-    USG -->|read/write| FDB
-    EXT -->|open browser| AUTH
-    AUTH -->|Google sign-in| FA
+    FS --> EXT
+    GIT --> EXT
+    SS --> EXT
+    EXT --> OUT
+    EXT -->|signed-in users| API
+    API --> AUTH
+    SES --> VAI
+    USG --> FDB
+    CARD --> FDB
 ```
 
-## Extension Internals
+## What Exists Now
 
-### Activation & Tracking
+### Extension
 
-When the extension activates (`onStartupFinished`), it:
+The extension is the primary runtime today.
 
-1. Creates a `SessionManager` instance that holds per-workspace session state
-2. Registers file system listeners for creates, saves, deletes, opens, and changes
-3. Registers commands: End Session, Add Note, Sign In, Sign Out
-4. Registers a URI handler for the auth callback (`/auth-callback`)
-5. Validates backend connectivity by pinging `GET /api/config`
+- Activates on `onStartupFinished`.
+- Starts per-workspace session tracking immediately.
+- Shows a recent-session "where I left off" prompt when local memory exists.
+- Registers commands for ending sessions, notes, auth, cards, safety checks, project context, and history search.
+- Works without the backend for all local tracking and deterministic summary features.
 
-### Session Data Collection
+### Local storage
 
-The extension collects:
+Worktrace writes two kinds of workspace-local data:
 
-- **File events**: Every create, save, and delete with timestamp
-- **Save counts**: Per-file save frequency
-- **Files touched**: All files opened or edited
-- **Git diff**: `git diff HEAD` at session end
-- **Branch**: `git branch --show-current`
-- **User notes**: Manual notes added via command palette
+- `sessions/`
+  - user-facing outputs such as `session-*.md`, `context.md`, and generated cards
+- `.worktrace/sessions.json`
+  - compact cross-session memory used for history search, churn detection, recurring friction, and startup continuity
 
-### Delta Builder
+The current architecture is local-first, but not yet multi-client. There is no separate `worktrace-agent` process yet.
 
-`buildSessionDelta()` transforms raw events + git diff into a structured delta:
+### Optional backend
 
-- **Created files**: Diff added lines + full file content read from disk
-- **Updated files**: Added/removed line counts and samples + full current file content
-- **Deleted files**: File name + affected dependents (found via `git grep` for import references)
+The backend is an enhancement layer, not a requirement for core extension use.
 
-### Deterministic Analysis
+- `GET /api/config` exposes backend availability and Firebase client config.
+- `/api/auth` serves the Google sign-in flow.
+- `POST /api/session/summarize` generates AI summaries.
+- `POST /api/session/context` generates AI project context updates.
+- `/api/user` stores and retrieves basic profile data.
+- `/api/card` generates shareable cards and reads saved session metadata.
 
-All analysis is performed locally without AI:
+If Firebase service account credentials are missing, the backend starts in degraded mode: health/config routes still work, while Firebase-backed routes return `503`.
 
-| Module | Output |
-|--------|--------|
-| `detectSessionMode()` | Session arc (e.g., "Exploration → Deep Focus → Winding Down") |
-| `detectFrictionPoints()` | Rapid saves, high iteration, create-delete cycles, long gaps |
-| `buildTomorrowChecklist()` | Actionable next-day checklist based on debug logs, TODOs, uncommitted changes |
-| `inferWhatIDidntTouch()` | Categories not modified (tests, docs, config, UI) |
-| `computeSessionConfidence()` | Low/Medium/High score with explanation |
-| `detectWorkIntent()` | Intent description and ranking of primary focus files |
+## End-to-End Flow
 
-### Summary Rendering
+### Local summary flow
 
-`renderSessionMemory()` produces a complete Markdown document locally. If the user is signed in and the backend is reachable, `callBackendSummarize()` sends the enriched delta to the backend, and the AI-generated summary replaces the local one.
+1. The user edits files normally.
+2. The extension records file events, touched files, save counts, and notes.
+3. On `Worktrace: End Session & Generate Summary`, the extension captures git diff and branch.
+4. Deterministic analysis computes session mode, friction, confidence, tomorrow checklist, untouched areas, and intent.
+5. A basic safety scan runs against the parsed diff.
+6. The session is persisted into `.worktrace/sessions.json`.
+7. Worktrace generates:
+   - a Markdown session summary
+   - an updated `sessions/context.md`
+8. Files are written into `sessions/` and opened in the editor.
 
-## Backend Internals
+### Signed-in AI flow
 
-### Server Startup
+When an ID token is available:
 
-`backend/src/index.ts` initializes:
+1. The extension sends the enriched session payload to the backend.
+2. The backend verifies the Firebase token.
+3. Quota enforcement runs against Firestore usage counters.
+4. Vertex AI generates:
+   - the AI session summary
+   - the AI project context update
+5. The extension replaces local fallbacks with the AI outputs.
+6. A shareable card can also be generated from saved backend session data.
 
-1. **Firebase Admin SDK** — wrapped in try/catch for graceful degradation
-2. **Express app** with CORS and JSON body parsing
-3. **Routes**: `/api/config` (public), `/api/auth` and `/api/session` (guarded by Firebase readiness)
+If any backend step fails, the extension falls back to the local summary and local context generation path.
 
-If the Firebase service account is missing, the server starts in **degraded mode** — health and config endpoints work, but auth/session routes return 503.
+## Responsibilities by Layer
 
-### Auth Flow
+### Extension responsibilities
 
-```
-Extension                    Backend                     Browser                    Firebase
-    |                           |                           |                           |
-    |-- open browser ---------->|                           |                           |
-    |                           |-- serve auth HTML ------->|                           |
-    |                           |                           |-- signInWithPopup ------->|
-    |                           |                           |<-- tokens + user info ----|
-    |<-- redirect URI scheme ---|<--------------------------|                           |
-    |   (idToken, refreshToken, email, userId)              |                           |
-    |                           |                           |                           |
-    |-- store in SecretStorage  |                           |                           |
-```
+- Workspace event capture
+- Git diff and branch capture
+- Deterministic analysis
+- Local session memory
+- Local context generation fallback
+- Safety scanning
+- History search UI
+- Writing user-facing outputs
 
-Token refresh uses the Firebase REST API (`securetoken.googleapis.com`) directly from the extension.
+### Backend responsibilities
 
-### Session Summarization
+- Google auth flow
+- Token verification
+- AI summary generation
+- AI context generation
+- Usage quota tracking
+- User profile storage
+- Saved session metadata for cards and streaks
 
-`POST /api/session/summarize` flow:
+## Deliberately Not Present Yet
 
-1. **Auth middleware**: Verify Firebase ID token
-2. **Usage check**: Ensure user hasn't exceeded their plan's monthly quota
-3. **Vertex AI**: Build a detailed prompt with full file context and generate summary
-4. **Increment usage**: Update Firestore counters
-5. **Return**: Markdown summary
+These are roadmap items, not current architecture:
 
-### Vertex AI Prompt
-
-The prompt includes:
-
-- Full file content for every created file
-- Full current file content + diff for every updated file
-- Affected dependent files (with content) for every deleted file
-- Raw git diff for additional context
-- All deterministic analysis results (friction, confidence, mode, checklist)
-
-This gives the model complete context to produce descriptions like "Added a new Express config route" rather than just "Created config.ts".
-
-### Usage & Plans
-
-Stored in Firestore under `users/{uid}`:
-
-```json
-{
-  "plan": "free",
-  "usage": {
-    "summariesThisMonth": 12,
-    "lastReset": "2026-02-01T00:00:00.000Z",
-    "lastSummaryAt": "2026-02-22T15:30:00.000Z"
-  },
-  "createdAt": "2026-01-15T10:00:00.000Z"
-}
-```
-
-Plan limits: free (50/month), pro (500/month), enterprise (5000/month). Usage resets on month boundary.
-
-## Data Flow: End-to-End
-
-```
-1. User codes normally → extension records file events
-2. User runs "End Session" command
-3. Extension captures git diff + branch
-4. buildSessionDelta() reads full file content from disk, finds affected files for deletions
-5. analyzeSession() runs all deterministic analysis
-6. renderSessionMemory() produces local Markdown summary
-7. If signed in:
-   a. getStoredIdToken() refreshes Firebase token
-   b. callBackendSummarize() sends enriched payload to backend
-   c. Backend verifies auth, checks quota, calls Vertex AI
-   d. AI summary replaces local summary
-8. Summary written to .cursor-sessions/session-{timestamp}.md
-9. File opened in editor
-```
+- `worktrace-agent`
+- `worktrace` CLI commands
+- prompt enhancement / outbound prompt wrapping
+- local provider usage collectors
+- project-configurable safety rules in `.worktrace/rules.yml`
+- dashboard, team, reporting, or export surfaces

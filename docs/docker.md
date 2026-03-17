@@ -1,97 +1,81 @@
-# Running the Backend with Docker
+# Running the Worktrace Backend with Docker
 
-This guide explains how to run the Cursor Session Tracker backend using Docker and Docker Compose. The setup **automatically injects** your `.env` file and secret JSON files at container startup—no manual env var entry or build-time secrets required.
+This guide only covers the optional backend. The extension itself does not need Docker and still works offline without the backend.
 
 ## Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
+- Docker
+- Docker Compose
 
 ## One-Time Setup
 
-Before running the container, ensure these files exist on your host. They are **not** baked into the image; they are mounted/injected at runtime.
-
 ### 1. Create `backend/.env`
-
-Copy the example and fill in your values:
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Edit `backend/.env` and set:
+Fill in the Firebase and Vertex AI values required by your environment.
 
-| Variable | Description |
-|----------|-------------|
-| `FIREBASE_API_KEY` | Firebase Web API key |
-| `FIREBASE_AUTH_DOMAIN` | Firebase auth domain |
-| `FIREBASE_PROJECT_ID` | Firebase project ID |
-| `FIREBASE_APP_ID` | Firebase app ID |
-| `FIREBASE_SERVICE_ACCOUNT_PATH` | `./secrets/cursor.json` (default) |
-| `VERTEX_PROJECT_ID` | GCP project for Vertex AI |
-| `VERTEX_LOCATION` | e.g. `us-central1` |
-| `VERTEX_MODEL_NAME` | e.g. `gemini-2.5-flash` |
-| `GOOGLE_APPLICATION_CREDENTIALS` | `./secrets/service.json` (default) |
-| `PORT` | `3000` (default) |
-| `CORS_ORIGIN` | `*` or your domain |
-| `EXTENSION_URI_SCHEME` | `vscode://local.cursor-session-tracker` |
+Important defaults used by the backend:
 
-### 2. Add Secret JSON Files
+- `FIREBASE_SERVICE_ACCOUNT_PATH=./secrets/cursor.json`
+- `GOOGLE_APPLICATION_CREDENTIALS=./secrets/service.json`
 
-Place your service account keys in `backend/secrets/`:
+`EXTENSION_URI_SCHEME` still exists in `.env.example`, but the current auth flow derives the URI scheme from the extension request query rather than reading that value directly.
 
-```
+### 2. Add secret files
+
+```text
 backend/secrets/
-├── cursor.json    # Firebase Admin SDK service account
-└── service.json   # Vertex AI / GCP service account
+  cursor.json
+  service.json
 ```
 
-- **cursor.json**: Download from Firebase Console → Project Settings → Service Accounts.
-- **service.json**: Create in GCP Console for the project that hosts Vertex AI.
+- `cursor.json` is the Firebase Admin SDK service account.
+- `service.json` is the GCP / Vertex AI service account.
 
-## How Automatic Injection Works
+## How the Compose Setup Works
 
-- **`.env`**: Docker Compose uses `env_file: ./backend/.env` to load all variables into the container at startup. No need to pass env vars manually.
-- **`cursor.json` & `service.json`**: The `secrets/` directory is mounted as a read-only volume into `/app/secrets` inside the container. The paths in `.env` (`./secrets/cursor.json`, `./secrets/service.json`) resolve correctly at runtime.
+- `docker-compose.yml` builds the backend image from `backend/Dockerfile`.
+- `env_file: ./backend/.env` injects runtime environment variables.
+- `./backend/secrets:/app/secrets:ro` mounts the secret JSON files read-only.
+- The backend listens on `http://localhost:3000`.
 
-## Running the Backend
+## Start and Stop
 
-From the project root:
+From the repo root:
 
 ```bash
-# Build and start
 docker compose up -d
-
-# View logs
 docker compose logs -f backend
-
-# Stop
 docker compose down
 ```
 
-The backend will be available at `http://localhost:3000`.
-
-## Verify It's Working
+## Verify the Backend
 
 ```bash
-# Health check
 curl http://localhost:3000/health
-
-# Config (public)
 curl http://localhost:3000/api/config
 ```
 
+Expected behavior:
+
+- `/health` works even in degraded mode
+- `/api/config` works without Firebase Admin credentials
+- `/api/auth`, `/api/session`, `/api/user`, and `/api/card` return `503` if Firebase Admin is not configured
+
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| `503` on `/api/auth` or `/api/session` | Ensure `backend/secrets/cursor.json` exists and is valid. |
-| Vertex AI errors | Ensure `backend/secrets/service.json` exists and the service account has Vertex AI permissions. |
-| Env vars not applied | Confirm `backend/.env` exists and `env_file` in `docker-compose.yml` points to it. |
-| Port 3000 in use | Change the host port in `docker-compose.yml` (e.g. `"3001:3000"`). |
+| Issue | Fix |
+| --- | --- |
+| `503` from Firebase-backed routes | Confirm `backend/secrets/cursor.json` exists and matches `FIREBASE_SERVICE_ACCOUNT_PATH` |
+| Vertex generation errors | Confirm `backend/secrets/service.json` exists and has Vertex AI access |
+| Wrong env values in container | Confirm `backend/.env` exists and `docker compose` is started from the repo root |
+| Port 3000 is busy | Change the host port mapping in `docker-compose.yml` |
 
 ## Security Notes
 
-- `.env` and `secrets/` are gitignored. Never commit them.
-- The image does **not** contain `.env` or secret files; they are only available at runtime via mounts and `env_file`.
-- Use `CORS_ORIGIN` to restrict origins in production.
+- Keep `backend/.env` and `backend/secrets/` out of git.
+- Do not bake service-account files into images.
+- Restrict `CORS_ORIGIN` in production instead of leaving `*`.
