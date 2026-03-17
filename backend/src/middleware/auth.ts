@@ -1,9 +1,6 @@
-import { Request, Response, NextFunction } from "express";
-import { getAuth, DecodedIdToken } from "firebase-admin/auth";
-
-export interface AuthenticatedRequest extends Request {
-  user?: DecodedIdToken;
-}
+import { Response, NextFunction } from "express";
+import { getAuth } from "firebase-admin/auth";
+import { AuthenticatedRequest } from "../request-types";
 
 export async function verifyFirebaseToken(
   req: AuthenticatedRequest,
@@ -23,7 +20,7 @@ export async function verifyFirebaseToken(
     req.user = decoded;
     next();
   } catch (error) {
-    console.error("Token verification failed:", error);
+    req.log?.warn("Token verification failed.", { error });
     res.status(401).json({ error: "Invalid or expired token." });
   }
 }

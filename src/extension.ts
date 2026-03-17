@@ -4,7 +4,7 @@ import { FileEventType } from "./types";
 import { SUMMARY_FOLDER, isExcludedFile } from "./constants";
 import { SessionManager } from "./session-manager";
 import { getGitDiff, getCurrentBranch, parseGitDiffByFile } from "./git";
-import { analyzeSession } from "./analysis";
+import { analyzeSession, summarizeCodeChanges } from "./analysis";
 import { renderSessionMemory } from "./renderer";
 import { runSafetyCheck, showSafetyNotifications } from "./safety-monitor";
 import { SessionStore } from "./session-store";
@@ -690,7 +690,20 @@ async function endSessionAndGenerateSummary() {
     // Non-critical — session still gets a summary
   }
 
-  let summary = renderSessionMemory(session, analysis, safetyWarnings);
+  // Load cross-session memory and generate context block
+  const memory = await getSessionMemory(store);
+  const projectName = path.basename(summaryDirectory);
+  const contextBlock = generateContextBlock(memory, projectName);
+  const codeChanges = summarizeCodeChanges(analysis.delta);
+
+  let summary = renderSessionMemory({
+    session,
+    analysis,
+    safetyWarnings,
+    codeChanges,
+    memory,
+    contextBlock,
+  });
 
   await extensionContext.workspaceState.update("sessionNotes", []);
 
@@ -704,7 +717,10 @@ async function endSessionAndGenerateSummary() {
         idToken
       );
       if (aiSummary) {
-        summary = aiSummary;
+        // Append context block to AI summary so it's never lost
+        summary = contextBlock
+          ? aiSummary + "\n\n---\n\n## AI Context Block\n\n<details>\n<summary>Expand for AI-ready context</summary>\n\n" + contextBlock + "\n\n</details>\n"
+          : aiSummary;
         usedAiSummary = true;
       }
     } catch {

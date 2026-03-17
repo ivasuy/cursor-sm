@@ -71,6 +71,16 @@ export type SafetyWarning = {
   message: string;
   file?: string;
   line?: string;
+  lineIndex?: number;
+  context?: string[];
+};
+
+export type CodeChangeSummary = {
+  file: string;
+  linesAdded: number;
+  linesRemoved: number;
+  functionsAdded: string[];
+  importsChanged: boolean;
 };
 
 // ============================================================================

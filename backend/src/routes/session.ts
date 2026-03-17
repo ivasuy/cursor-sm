@@ -1,8 +1,8 @@
 import { Router, Response } from "express";
 import {
   verifyFirebaseToken,
-  AuthenticatedRequest,
 } from "../middleware/auth";
+import { AuthenticatedRequest } from "../request-types";
 import { generateSummary } from "../services/vertex";
 import { checkUsageQuota, incrementUsage } from "../services/usage";
 import { saveSessionSummary } from "../services/sessions";
@@ -35,8 +35,9 @@ sessionRouter.post(
 
       try {
         await saveSessionSummary(uid, { session, analysis }, markdown);
-      } catch {
+      } catch (error) {
         // Non-critical: session summary save failure shouldn't block response
+        req.log?.warn("Failed to persist session summary.", { error, uid });
       }
 
       res.json({ markdown });
@@ -44,6 +45,11 @@ sessionRouter.post(
       const message =
         error instanceof Error ? error.message : "Internal server error";
       const status = message.includes("limit reached") ? 429 : 500;
+      req.log?.error("Session summarization failed.", {
+        error,
+        uid: req.user?.uid,
+        status,
+      });
       res.status(status).json({ error: message });
     }
   }
