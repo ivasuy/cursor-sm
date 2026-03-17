@@ -9,15 +9,12 @@ import { renderSessionMemory } from "./renderer";
 import { runSafetyCheck, showSafetyNotifications } from "./safety-monitor";
 import { SessionStore } from "./session-store";
 import { getSessionMemory } from "./memory";
-import {
-  generateContextBlock,
-  generateClaudeMdBlock,
-  generateCursorRulesBlock,
-} from "./continuity";
+import { generateProjectContext } from "./continuity";
 import {
   validateBackendConnection,
   getStoredIdToken,
   callBackendSummarize,
+  callBackendContext,
   callBackendJson,
   callBackendRaw,
 } from "./auth";
@@ -255,48 +252,33 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const store = new SessionStore(ctx.summaryDirectory);
-      const memory = await getSessionMemory(store);
+      const contextPath = path.join(
+        ctx.summaryDirectory,
+        SUMMARY_FOLDER,
+        "context.md"
+      );
 
-      if (memory.totalSessions === 0) {
-        vscode.window.showInformationMessage(
-          "No session history yet. End a session first to build context."
+      try {
+        const contextBytes = await vscode.workspace.fs.readFile(
+          vscode.Uri.file(contextPath)
         );
-        return;
+        const content = Buffer.from(contextBytes).toString("utf8");
+
+        const doc = await vscode.workspace.openTextDocument({
+          content,
+          language: "markdown",
+        });
+        await vscode.window.showTextDocument(doc, { preview: true });
+
+        await vscode.env.clipboard.writeText(content);
+        vscode.window.showInformationMessage(
+          "Project context copied to clipboard. Paste into any AI tool."
+        );
+      } catch {
+        vscode.window.showInformationMessage(
+          "No project context yet. End a session first to generate context."
+        );
       }
-
-      const projectName = path.basename(ctx.summaryDirectory);
-
-      const format = await vscode.window.showQuickPick(
-        [
-          { label: "Full Context Block", description: "General-purpose prompt context", value: "full" },
-          { label: "CLAUDE.md Block", description: "For appending to CLAUDE.md", value: "claude" },
-          { label: ".cursorrules Block", description: "For Cursor AI rules", value: "cursor" },
-        ],
-        { placeHolder: "Choose context format" }
-      );
-
-      if (!format) return;
-
-      let content: string;
-      if (format.value === "claude") {
-        content = generateClaudeMdBlock(memory, projectName);
-      } else if (format.value === "cursor") {
-        content = generateCursorRulesBlock(memory, projectName);
-      } else {
-        content = generateContextBlock(memory, projectName);
-      }
-
-      const doc = await vscode.workspace.openTextDocument({
-        content,
-        language: "markdown",
-      });
-      await vscode.window.showTextDocument(doc, { preview: true });
-
-      await vscode.env.clipboard.writeText(content);
-      vscode.window.showInformationMessage(
-        "Context block copied to clipboard."
-      );
     }
   );
 
@@ -690,20 +672,49 @@ async function endSessionAndGenerateSummary() {
     // Non-critical — session still gets a summary
   }
 
-  // Load cross-session memory and generate context block
+  // Load cross-session memory
   const memory = await getSessionMemory(store);
   const projectName = path.basename(summaryDirectory);
-  const contextBlock = generateContextBlock(memory, projectName);
   const codeChanges = summarizeCodeChanges(analysis.delta);
 
+  const sessionsFolderPath = path.join(summaryDirectory, SUMMARY_FOLDER);
+  const sessionsFolderUri = vscode.Uri.file(sessionsFolderPath);
+
+  try {
+    await vscode.workspace.fs.createDirectory(sessionsFolderUri);
+  } catch {
+    // Folder may already exist
+  }
+
+  // Read previous context if it exists
+  const contextPath = path.join(sessionsFolderPath, "context.md");
+  let previousContext: string | null = null;
+  try {
+    const contextBytes = await vscode.workspace.fs.readFile(
+      vscode.Uri.file(contextPath)
+    );
+    previousContext = Buffer.from(contextBytes).toString("utf8");
+  } catch {
+    // No previous context — first session
+  }
+
+  // Generate local summary (no context block embedded — context is separate)
   let summary = renderSessionMemory({
     session,
     analysis,
     safetyWarnings,
     codeChanges,
     memory,
-    contextBlock,
   });
+
+  // Generate local context (deterministic fallback)
+  let context = generateProjectContext(
+    memory,
+    session,
+    analysis,
+    projectName,
+    previousContext
+  );
 
   await extensionContext.workspaceState.update("sessionNotes", []);
 
@@ -711,20 +722,21 @@ async function endSessionAndGenerateSummary() {
   const idToken = await getStoredIdToken(extensionContext);
   if (idToken) {
     try {
-      const aiSummary = await callBackendSummarize(
-        session,
-        analysis,
-        idToken
-      );
+      // Fire both summary and context generation in parallel
+      const [aiSummary, aiContext] = await Promise.all([
+        callBackendSummarize(session, analysis, idToken),
+        callBackendContext(session, analysis, previousContext, idToken),
+      ]);
+
       if (aiSummary) {
-        // Append context block to AI summary so it's never lost
-        summary = contextBlock
-          ? aiSummary + "\n\n---\n\n## AI Context Block\n\n<details>\n<summary>Expand for AI-ready context</summary>\n\n" + contextBlock + "\n\n</details>\n"
-          : aiSummary;
+        summary = aiSummary;
         usedAiSummary = true;
       }
+      if (aiContext) {
+        context = aiContext;
+      }
     } catch {
-      // Backend unavailable, use local summary
+      // Backend unavailable, use local summary + context
     }
   } else {
     const action = await vscode.window.showInformationMessage(
@@ -736,23 +748,22 @@ async function endSessionAndGenerateSummary() {
     }
   }
 
-  const sessionsFolderPath = path.join(summaryDirectory, SUMMARY_FOLDER);
-  const sessionsFolderUri = vscode.Uri.file(sessionsFolderPath);
-
-  try {
-    await vscode.workspace.fs.createDirectory(sessionsFolderUri);
-  } catch {
-    // Folder may already exist
-  }
-
   const summaryFilename = generateSummaryFilename();
   const summaryPath = path.join(sessionsFolderPath, summaryFilename);
 
   try {
-    await vscode.workspace.fs.writeFile(
-      vscode.Uri.file(summaryPath),
-      Buffer.from(summary, "utf8")
-    );
+    // Write session summary and context file in parallel
+    await Promise.all([
+      vscode.workspace.fs.writeFile(
+        vscode.Uri.file(summaryPath),
+        Buffer.from(summary, "utf8")
+      ),
+      vscode.workspace.fs.writeFile(
+        vscode.Uri.file(contextPath),
+        Buffer.from(context, "utf8")
+      ),
+    ]);
+
     vscode.window.showInformationMessage(
       `Session summary written to ${SUMMARY_FOLDER}/${summaryFilename}`
     );

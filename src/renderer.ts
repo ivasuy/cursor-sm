@@ -6,11 +6,10 @@ export type RenderOptions = {
   safetyWarnings: SafetyWarning[];
   codeChanges?: CodeChangeSummary[];
   memory?: SessionMemory;
-  contextBlock?: string;
 };
 
 export function renderSessionMemory(options: RenderOptions): string {
-  const { session, analysis, safetyWarnings, codeChanges, memory, contextBlock } = options;
+  const { session, analysis, safetyWarnings, codeChanges, memory } = options;
   const s: string[] = [];
 
   s.push("# Worktrace Session Report");
@@ -335,21 +334,6 @@ export function renderSessionMemory(options: RenderOptions): string {
     );
   }
   s.push("");
-
-  // AI Context Block
-  if (contextBlock) {
-    s.push("---");
-    s.push("");
-    s.push("## AI Context Block");
-    s.push("");
-    s.push("<details>");
-    s.push("<summary>Expand for AI-ready context</summary>");
-    s.push("");
-    s.push(contextBlock);
-    s.push("");
-    s.push("</details>");
-    s.push("");
-  }
 
   return s.join("\n");
 }

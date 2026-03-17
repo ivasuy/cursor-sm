@@ -124,15 +124,16 @@ function buildPrompt(payload: SessionPayload): string {
     totalAdded + totalRemoved >= 500 ||
     totalAffectedDeps >= 6;
 
-  return `You are a senior development-session analyst, security reviewer, and product-minded engineering lead.
+  return `You are a senior development-session analyst and security reviewer.
 
-Below is a SessionPayload. Your job: produce a single polished Markdown document that feels like a "memory checkpoint for unfinished thinking", NOT a GitHub/PR summary.
+Below is a SessionPayload. Your job: produce a single polished Markdown session summary — a "memory checkpoint" of what happened THIS session. This is NOT a project context document (that's generated separately). Focus on the narrative of this specific work session.
 
 ABSOLUTE RULES
 - Do NOT output raw diffs verbatim except for short, quoted 5-10 line snippets when needed for security explanations.
-- Do NOT restate file-by-file +/- counts as the main content (counts can exist, but not as the point).
+- Do NOT restate file-by-file +/- counts as the main content.
+- Do NOT include architecture decisions, module maps, or roadmaps — those belong in the project context, not here.
 - Do NOT speculate beyond the provided code.
-- Be concrete: reference real file names, symbols, and patterns only when they appear in the content.
+- Be concrete: reference real file names, symbols, and patterns from the code.
 - Keep it human-scaled: never list more than 5 files per subsection; prefer grouping + narrative.
 
 ====================================================================
@@ -182,22 +183,24 @@ ${analysis.userNote ? `## Developer Note\n${analysis.userNote}` : ""}
 OUTPUT STRUCTURE (EXACT — follow this order)
 ====================================================================
 
-# Session Memory
+# Session Summary
 
 ## Snapshot
-Compact header block:
-- Branch
-- Duration
-- Session Mode
+Compact header:
+- Branch, Duration, Session Mode
 - Scope (files touched, created/updated/deleted counts, total saves)
-- "Work Theme" (1 short phrase derived from the code changes)
+- "Work Theme" (1 short phrase derived from code changes)
 
 ## What I Was Trying To Do
 2-4 sentences describing intent and why it matters, grounded in actual code.
 
+## What Changed (Meaning, Not Diff)
+Explain conceptual changes grouped by theme: UI/UX behavior, auth/session, data flow, layout/components, tooling/config.
+Use evidence from code: imports, new components, removed hooks, route/page changes, etc.
+
 ## Where I Got Stuck / What Slowed Me Down
 2-6 bullets rewriting friction points to feel personally useful.
-If friction signals are low but code suggests risk/complexity, mention "hidden friction" (e.g., large deletions, refactors) WITHOUT moralizing.
+If friction signals are low but code suggests risk/complexity, mention "hidden friction" (e.g., large deletions, refactors).
 
 ## Confidence & Readiness
 
@@ -208,87 +211,56 @@ If friction signals are low but code suggests risk/complexity, mention "hidden f
 - 0-39: exploratory / unstable
 
 ### Why This Score
-3-6 bullets referencing evidence from code:
-- uncommitted diff size
-- removed vs added ratio
-- presence of TODO/FIXME/HACK
-- console logs / debug flags
-- deletion impact (deleted components used elsewhere)
-- tests touched or not
-- config/auth/security sensitive areas changed
-- session ends right after large edits (unfinished signal)
+3-6 bullets referencing evidence from code.
 
-### Ship / Split / Pause Recommendation
-Choose exactly ONE of: Ship now | Split into smaller commits first | Pause and stabilize before committing.
+### Ship / Split / Pause
+Choose ONE: Ship now | Split into smaller commits first | Pause and stabilize.
 Justify in 1-2 lines.
-
-## What Changed (Meaning, Not Diff)
-Explain conceptual changes grouped by theme: UI/UX behavior, auth/session, data flow, layout/components, tooling/config.
-Use evidence from code: imports, new components, removed hooks, route/page changes, etc.
-NO raw diff dump.
 
 ## Security & Vulnerability Check
 
 ### Potential Risks Found
-0-8 items. Only include if justifiable from the code. Look for:
-- unsanitized user input rendered into the DOM
-- dangerouslySetInnerHTML usage
-- direct use of query params in auth flows
-- missing CSRF protections
-- leaking secrets via console.log
-- insecure redirects / open redirect patterns
-- exposing internal error messages
-- missing validation on server actions / API routes
-- weak auth/session handling patterns
-- insecure storage of tokens (localStorage for auth, etc.)
-- overly permissive CORS or headers
+0-8 items. Only include if justifiable from the code.
 
 ### How To Fix / Harden
-Concrete fix strategy for each risk found.
-If no risks: say "No obvious security issues detected from provided code" and provide 2-3 general hardening reminders relevant to the changed areas.
+Concrete fix strategy per risk. If none: "No obvious security issues detected" + 2-3 relevant hardening reminders.
 
 ### Regression Traps
-Likely breakpoints from deletions/large removals: deleted components referenced elsewhere, layout changes affecting boundaries, etc.
+Likely breakpoints from deletions/large removals.
 
 ## Tomorrow, First 10 Minutes
-Numbered checklist (5-10 items max), highly actionable:
-- reopen the true "primary focus file"
-- address the highest security risk (if any)
-- add/adjust tests if applicable
-- cleanup tasks (remove console logs, tighten imports)
-- decide commit strategy
+Numbered checklist (5-8 items), highly actionable.
 
 ## What I Deliberately Didn't Touch
-Short bullets that reduce anxiety (tests/docs/config/auth/back-end untouched — only if supported by file set).
+Short bullets that reduce anxiety — only if supported by the file set.
 
 ${isBigSession ? `## Feature/Outcome Map
-(Include this section because this is a big session: ${session.filesTouched.length} files touched, ${totalAdded + totalRemoved} lines changed, ${totalAffectedDeps} affected dependents.)
+(Big session: ${session.filesTouched.length} files, ${totalAdded + totalRemoved} lines changed.)
 
-### What You Can Claim As "Done"
-3-7 bullets phrased like outcomes (not code changes).
+### Done
+3-7 bullets phrased as outcomes.
 
-### What's Half-Done / Risky
+### Half-Done / Risky
 3-7 bullets.
 
 ### Suggested Commit Slices
-2-5 suggested commit groupings by theme (UI, cleanup, deletion, refactor).` : "(Omit Feature/Outcome Map — session is not large enough to warrant it.)"}
+2-5 groupings by theme.` : ""}
 
-## My Note
-Include only if developer note was provided above.
+${analysis.userNote ? "## My Note\nInclude developer note from above." : ""}
 
 ## One-Line Shareable Update
-One sentence that the developer can paste to X/LinkedIn/Slack.
+One sentence for X/LinkedIn/Slack.
 
 ====================================================================
 QUALITY RULES
 ====================================================================
-- Do not be generic. If you cannot ground a statement in code, don't include it.
-- Prefer "because X changed in file Y" style reasoning.
-- If huge deletions happened, explicitly assess whether this is a refactor, cleanup, or breaking change risk.
-- When security checks are relevant (signin/signup pages, auth flows, redirects), be extra careful.
-- Keep the tone: first-person developer writing to their future self, professional but not corporate.
+- Do not be generic. Ground every statement in code.
+- Prefer "because X changed in file Y" reasoning.
+- If huge deletions happened, assess: refactor, cleanup, or breaking change?
+- Security-sensitive areas (auth, redirects, tokens): be extra careful.
+- Tone: first-person developer to future self, professional but not corporate.
 
-Now generate the Markdown "Session Memory" document.`;
+Now generate the session summary.`;
 }
 
 export async function generateSummary(

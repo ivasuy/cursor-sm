@@ -4,6 +4,16 @@
 
 "The operating system for AI-assisted development" - not a summary tool, but an always-on layer that sits between you and your AI coding tools, providing memory, safety, and proof of work.
 
+## Product Architecture
+
+Worktrace evolves into a local-first system with three distinct layers:
+
+- **Extension / editor client** - the always-on UX layer in VS Code/Cursor that captures file events, renders summaries, and surfaces safety/memory signals
+- **Local Worktrace agent (`worktrace-agent`)** - a bundled cross-platform runtime that owns session memory, deterministic analysis, safety monitoring, git/file access, and future provider usage collection
+- **Cloud backend** - auth, plans, optional AI summaries, dashboard sync, and future team/reporting features
+
+This keeps the cloud backend focused on metadata and AI enhancement, while the local agent becomes the reusable core for the extension today and the CLI tomorrow.
+
 ## Feature Pillars
 
 ### 1. Developer Memory (Cross-Session Intelligence)
@@ -61,7 +71,31 @@
 - `worktrace status` - current session stats
 - `worktrace history` - search past sessions
 - `worktrace check` - run safety scan on recent changes
+- `worktrace usage` - inspect local provider usage, cost, limits, remaining quota, and reset windows
 - Works for Claude Code, Codex CLI, aider, terminal-based devs
+- Shares the same core runtime as the extension via `worktrace-agent`
+
+### 8. Local Worktrace Agent (`worktrace-agent`)
+
+- A bundled local service/runtime that the extension starts automatically and the CLI reuses directly
+- Owns the local `.worktrace/` data store, deterministic analysis engine, safety monitor, session graph, and future prompt/context APIs
+- Exposes stable local routes/contracts for `usage`, `cost`, `context`, `health`, and `refresh`
+- Lets Worktrace stay expandable: multiple clients can talk to the same core without duplicating logic
+- Becomes the right place to integrate external collectors such as CodexBar-derived provider usage logic
+
+### 9. Provider Usage Intelligence (CodexBar-derived collector layer)
+
+- Bundle provider usage collection into the local Worktrace agent, not the cloud backend
+- Reuse CodexBar's provider fetchers/parsers for:
+  - token usage
+  - hard limits / soft limits
+  - remaining quota
+  - reset timestamps / windows
+  - local cost scans from JSONL/session logs
+- Start with Codex, Claude, Gemini, Cursor, and local cost usage, then expand to more providers behind the same adapter model
+- Keep only the reusable backend/provider logic from CodexBar; do not import menu bar UI, SwiftUI/AppKit code, or the macOS-specific app shell
+- Cross-platform rule: prefer CLI/API/config/log-file sources first, then add OS-specific adapters for browser/session/secure-store access where needed
+- Every provider reports explicit capabilities so Worktrace can distinguish supported, partially supported, and unavailable features per OS
 
 ## What Makes This Unpayable-to-Leave
 
@@ -80,6 +114,76 @@
 | --- | --- | --- |
 | ~~Phase 1~~ | ~~Rebrand to Worktrace, refactor extension into multi-file architecture, safety monitor (basic), improved session summaries~~ | ~~Foundation~~ **COMPLETED** |
 | ~~Phase 2~~ | ~~Cross-session memory, continuity engine, context injection, `.worktrace/` local data store~~ | ~~Core differentiator~~ **COMPLETED** |
-| Phase 3 | CLI tool, prompt enhancer | Platform expansion |
-| Phase 4 | Web dashboard, cloud metadata sync | Visualization + teams |
+| Phase 3 | `worktrace-agent`, CLI tool, prompt enhancer, local usage intelligence | Platform expansion |
+| Phase 4 | Web dashboard, cloud metadata sync, agent-backed usage timeline | Visualization + teams |
 | Phase 5 | Team features, exportable reports, billing | Monetization |
+
+## Execution Plan
+
+### Step 1 - Build `worktrace-agent` as the local runtime
+
+- Introduce `worktrace-agent` as the shared local core for the extension and future CLI
+- Move deterministic analysis, safety monitoring, session graph storage, and context generation behind agent-friendly interfaces
+- Keep the extension as the first client, but stop treating it as the only runtime
+- Define stable local contracts for:
+  - session status
+  - context generation
+  - safety checks
+  - usage / cost / capabilities
+
+### Step 2 - Ship the CLI on top of the same agent
+
+- Implement the still-missing CLI as a first-class Worktrace surface, not a separate prototype
+- Core commands:
+  - `worktrace start`
+  - `worktrace end`
+  - `worktrace status`
+  - `worktrace context`
+  - `worktrace history`
+  - `worktrace check`
+  - `worktrace usage`
+- The CLI should talk to `worktrace-agent` or start it automatically if it is not already running
+- Terminal-first workflows should get the same memory, safety, and usage signals as the editor extension
+
+### Step 3 - Add CodexBar-derived usage collection inside the agent
+
+- Treat CodexBar as a collector source, not as a product dependency
+- Reuse only provider/back-end logic from `CodexBarCore`
+- Rebuild orchestration in Worktrace instead of importing CodexBar's current `UsageStore` app layer
+- Normalize all provider output into a Worktrace usage contract that preserves the value of CodexBar snapshots while staying backend/client-agnostic
+- Initial scope:
+  - Codex
+  - Claude
+  - Gemini
+  - Cursor
+  - local cost scanning
+
+### Step 4 - Make it truly cross-platform
+
+- The local agent must be the portability boundary, not the current macOS-only CodexBar app
+- v1 source priority:
+  - provider CLIs
+  - provider APIs with explicit auth
+  - config/session files
+  - local history/log scans
+- Defer macOS-only dashboard/browser flows behind capability flags until there are Linux/Windows replacements
+- Replace platform-specific auth/session access gradually with per-OS adapters for:
+  - secure credential storage
+  - browser profile/session discovery
+  - process / PTY execution
+
+### Step 5 - Feed usage intelligence back into Worktrace
+
+- Add normalized `usageContext` into local Markdown summaries, continuity prompts, and AI summary payloads
+- Let Worktrace explain not just what changed, but the operating context:
+  - which provider was used
+  - quota pressure
+  - reset timing
+  - cost accumulation
+- Use the same data later in the web dashboard for per-project AI tooling timelines and cost visibility
+
+### Step 6 - Keep the platform expandable
+
+- All provider integrations must be adapter-driven so new AI tools can be added without changing the extension/CLI contract
+- The local agent remains the single place where session intelligence, safety, and provider telemetry come together
+- The cloud backend stays optional for AI summaries and sync, not required for core Worktrace functionality
