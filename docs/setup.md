@@ -1,149 +1,166 @@
-# Cursor Session Tracker
+# Worktrace Setup
 
-A VS Code / Cursor extension that tracks your coding sessions and generates structured summaries — locally with deterministic analysis, or enhanced with AI via a backend powered by Google Vertex AI.
+This guide covers the current setup that exists in the repo today:
 
-> **Language-agnostic:** Works with any project — TypeScript, Go, Java, Python, Rust, Solidity, Spring Boot, Next.js, and more.
+- the VS Code / Cursor extension
+- the optional backend used for auth, AI summaries, AI context, and cards
 
-## Architecture
+It does not cover the future `worktrace-agent`, CLI, dashboard, or provider usage collectors because those are not implemented yet.
 
-The system is split into two independent pieces:
+## System Shape
 
-| Component | Description |
-|-----------|-------------|
-| **Extension** (`src/`) | VS Code extension that tracks file events, computes diffs, and generates deterministic session summaries |
-| **Backend** (`backend/`) | Express server handling Google Auth, Firestore user/plan storage, and Vertex AI summary generation |
+| Component | Required | Role |
+| --- | --- | --- |
+| Extension (`src/`) | Yes | Local tracking, deterministic summaries, local memory, safety scan, history search |
+| Backend (`backend/`) | No | Google auth, AI summaries, AI project context, cards, usage tracking |
 
-The extension works fully offline. The backend is optional — it enriches summaries with AI when the user is signed in.
+The extension works offline. The backend is only needed for signed-in / AI features.
 
-See [architecture.md](architecture.md) for the full system design and [overview.md](overview.md) for feature details.
-
-## Quick Start: Extension
+## Extension Setup
 
 ### Prerequisites
 
 - Node.js 18+
 - VS Code 1.85+ or Cursor
 
-### Install & Run
+### Install and run
 
 ```bash
-# Install dependencies
 npm install
-
-# Compile
 npm run compile
-
-# Package as VSIX (optional)
 npm run package
 ```
 
-To test locally, press `F5` in VS Code/Cursor to launch the Extension Development Host.
+- `npm run package` produces `worktrace-0.2.0.vsix`.
+- Press `F5` in VS Code / Cursor to launch the Extension Development Host.
 
-### Configuration
+### Extension configuration
 
-Open VS Code settings and search for `cursorSessionTracker`:
+Open settings and search for `worktrace`.
 
 | Setting | Default | Description |
-|---------|---------|-------------|
-| `cursorSessionTracker.backendUrl` | `http://localhost:3000` | Backend API URL for AI summaries |
-| `cursorSessionTracker.firebaseApiKey` | `""` | Firebase Web API key for token refresh (auto-configured when backend is reachable) |
-| `cursorSessionTracker.displayName` | `""` | Your display name shown on shareable session cards |
+| --- | --- | --- |
+| `worktrace.backendUrl` | `http://localhost:3000` | Backend API URL for auth, AI summaries, AI context, and cards |
+| `worktrace.firebaseApiKey` | `""` | Firebase Web API key used for token refresh |
+| `worktrace.displayName` | `""` | Name shown on shareable cards |
+| `worktrace.safetyMonitor` | `true` | Enable the safety scan UX |
 
-### Usage
+### Extension commands
 
-1. Open any project — tracking starts automatically
-2. Code as usual — the extension tracks file creates, saves, deletes, and diffs
-3. Optionally add notes: **Command Palette → "Add Session Note"**
-4. End session: **Command Palette → "End Session & Generate Summary"**
-5. A `.cursor-sessions/session-YYYY-MM-DD_HH-MM-SS.md` file is created and opened
+| Command | Purpose |
+| --- | --- |
+| `Worktrace: End Session & Generate Summary` | Write a summary and update `sessions/context.md` |
+| `Worktrace: Add Session Note` | Add explicit intent or blocker notes |
+| `Worktrace: Sign In with Google` | Enable backend-powered features |
+| `Worktrace: Sign Out` | Remove stored auth |
+| `Worktrace: Set Display Name` | Sync display name for cards |
+| `Worktrace: Generate Shareable Card` | Generate a card for a chosen date |
+| `Worktrace: Run Safety Check` | Scan current diff for basic issues |
+| `Worktrace: Show Session Context` | Open and copy project context |
+| `Worktrace: Search Session History` | Search local session memory |
 
-## Quick Start: Backend
+### Workspace output
+
+```text
+sessions/
+  session-YYYY-MM-DD_HH-MM-SS.md
+  context.md
+  card-YYYY-MM-DD.png
+
+.worktrace/
+  sessions.json
+```
+
+## Backend Setup
 
 ### Prerequisites
 
 - Node.js 18+
-- A Firebase project with Authentication (Google provider) and Firestore enabled
-- A GCP project with Vertex AI API enabled
-- A service account JSON key with Vertex AI and Firestore permissions
+- Firebase project with Google auth and Firestore
+- GCP project with Vertex AI enabled
+- Firebase Admin SDK service account
+- Vertex AI / GCP service account
 
-### Install & Run
+### Install and run
 
 ```bash
 cd backend
-
-# Install dependencies
 npm install
-
-# Copy and fill in environment variables
 cp .env.example .env
-# Edit .env with your Firebase and Vertex AI credentials
+mkdir -p secrets
+```
 
-# Place your GCP service account key in the secrets folder
-cp /path/to/your-service-account.json ./secrets/vertex-service-account.json
+Place these files in `backend/secrets/`:
 
-# Run in development
+- `cursor.json` for Firebase Admin SDK
+- `service.json` for Vertex AI / GCP access
+
+Start the backend:
+
+```bash
+cd backend
 npm run dev
 ```
 
-The server starts at `http://localhost:3000`. Test connectivity:
+Verify health:
 
 ```bash
+curl http://localhost:3000/health
 curl http://localhost:3000/api/config
-# {"status":"ok","version":"0.1.0","features":{"summarize":true,"auth":true,"usage":true}}
 ```
 
-### Configuration Reference
-
-All environment variables (defined in `backend/.env.example`):
+### Environment variables
 
 | Variable | Required | Description |
-|----------|----------|-------------|
-| `FIREBASE_API_KEY` | Yes | Firebase Web API key (for client auth page) |
-| `FIREBASE_AUTH_DOMAIN` | Yes | Firebase auth domain (e.g. `project.firebaseapp.com`) |
-| `FIREBASE_PROJECT_ID` | Yes | Firebase project ID (used by both client auth page and Admin SDK) |
-| `FIREBASE_APP_ID` | Yes | Firebase app ID (for client auth page) |
-| `FIREBASE_SERVICE_ACCOUNT_PATH` | Yes | Path to Firebase service account JSON (default: `./secrets/cursor.json`) |
-| `VERTEX_PROJECT_ID` | Yes | GCP project ID hosting Vertex AI (can differ from Firebase project) |
-| `VERTEX_LOCATION` | No | Vertex AI region (default: `us-central1`) |
-| `VERTEX_MODEL_NAME` | No | Model ID (default: `gemini-2.5-flash`) |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Yes | Path to Vertex AI service account JSON (default: `./secrets/vertex-service-account.json`) |
-| `PORT` | No | Server port (default: `3000`) |
-| `CORS_ORIGIN` | No | Allowed CORS origin (default: `*`) |
-| `EXTENSION_URI_SCHEME` | No | VS Code URI scheme for auth callback |
+| --- | --- | --- |
+| `FIREBASE_API_KEY` | Yes | Firebase Web API key for the auth page |
+| `FIREBASE_AUTH_DOMAIN` | Yes | Firebase auth domain |
+| `FIREBASE_PROJECT_ID` | Yes | Firebase project ID |
+| `FIREBASE_APP_ID` | Yes | Firebase app ID |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | Yes | Firebase Admin SDK JSON path; default is `./secrets/cursor.json` |
+| `VERTEX_PROJECT_ID` | Yes | GCP project hosting Vertex AI |
+| `VERTEX_LOCATION` | No | Vertex AI region; defaults to `us-central1` if unset |
+| `VERTEX_MODEL_NAME` | No | Vertex model; defaults to `gemini-2.5-flash` if unset |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Yes | Vertex service account JSON path; default is `./secrets/service.json` |
+| `PORT` | No | Backend port; default `3000` |
+| `CORS_ORIGIN` | No | Allowed origin; default `*` |
+| `EXTENSION_URI_SCHEME` | No | Present in `.env.example`, but the current auth flow derives the URI scheme from the extension request query rather than reading this value directly |
 
-## Deployment
+### What the backend adds
 
-### Backend (Cloud Run)
+When configured and the user is signed in, the backend provides:
+
+- Google sign-in
+- AI-generated session summaries
+- AI-generated project context
+- usage quota enforcement
+- user profile storage
+- shareable card generation and streak data
+
+If Firebase credentials are missing, the backend still serves `/health` and `/api/config`, but Firebase-backed routes return `503`.
+
+## Deployment Notes
+
+### VSIX packaging
+
+```bash
+npm run package
+code --install-extension worktrace-0.2.0.vsix
+```
+
+### Cloud Run backend
 
 ```bash
 cd backend
 npm run build
-
-# Deploy to Cloud Run (example)
-gcloud run deploy cursor-session-backend \
-  --source . \
-  --set-env-vars "VERTEX_PROJECT_ID=your-project,VERTEX_LOCATION=us-central1,FIREBASE_PROJECT_ID=your-project" \
-  --allow-unauthenticated
+gcloud run deploy worktrace-backend --source .
 ```
 
-Mount the service account key as a secret volume or set `GOOGLE_APPLICATION_CREDENTIALS` to the mounted path. Update `CORS_ORIGIN` to your production domain.
+After deployment, set `worktrace.backendUrl` in editor settings to your deployed backend URL.
 
-### Firestore Rules
+### Docker
 
-```bash
-cd backend
-firebase deploy --only firestore:rules
-```
-
-### Extension (VSIX)
-
-```bash
-npm run package
-# Produces cursor-session-tracker-0.1.0.vsix
-# Install via: code --install-extension cursor-session-tracker-0.1.0.vsix
-```
-
-Update `cursorSessionTracker.backendUrl` in VS Code settings to point to your deployed backend URL.
+For local containerized backend setup, see [docker.md](docker.md).
 
 ## License
 

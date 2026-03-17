@@ -1,131 +1,120 @@
-# Overview
+# Feature Overview
 
-## What the Extension Tracks
+This file covers what Worktrace currently does in the repo today. It is intentionally narrower than the long-term roadmap in `product-pivot.md`.
 
-Cursor Session Tracker monitors your coding activity in real time:
+## Signals Worktrace Tracks
+
+The extension captures these local signals while you work:
 
 | Signal | Source | Purpose |
-|--------|--------|---------|
-| File creates | `workspace.onDidCreateFiles` | Detect new files scaffolded during the session |
-| File saves | `workspace.onDidSaveTextDocument` | Track iteration frequency per file |
-| File deletes | `workspace.onDidDeleteFiles` | Detect removed files and experimentation patterns |
-| File opens | `workspace.onDidOpenTextDocument` | Track which files were browsed |
-| Text changes | `workspace.onDidChangeTextDocument` | Record file touch events |
-| Git diff | `git diff HEAD` (at session end) | Capture exact code changes |
-| Git branch | `git branch --show-current` | Record which branch work happened on |
-| User notes | Manual input via command palette | Ground-truth developer intent |
+| --- | --- | --- |
+| File creates | `workspace.onDidCreateFiles` | Detect scaffolding and new modules |
+| File saves | `workspace.onDidSaveTextDocument` | Measure iteration intensity per file |
+| File deletes | `workspace.onDidDeleteFiles` | Detect churn and abandoned approaches |
+| File opens | `workspace.onDidOpenTextDocument` | Track files the session explored |
+| Text changes | `workspace.onDidChangeTextDocument` | Mark active files as touched |
+| Git diff | `git diff HEAD` at session end | Capture actual code changes |
+| Git branch | `git branch --show-current` | Keep session context branch-aware |
+| Manual notes | Command palette input | Capture explicit human intent |
 
-### File Exclusions
+Excluded content includes generated folders, build output, dependency folders, lock files, `sessions/`, and `.worktrace/`.
 
-Build artifacts, lock files, and generated content are automatically excluded:
+## Shipped Features
 
-`node_modules/`, `dist/`, `build/`, `.next/`, `target/`, `coverage/`, `.git/`, `package-lock.json`, `yarn.lock`, `*.min.js`, `*.map`, and more.
+### Deterministic session summary
 
-## Summary Sections
+Every session can be summarized locally without network access. Current summary logic includes:
 
-Every session summary includes these sections, computed deterministically:
+- session mode
+- confidence level
+- friction points
+- tomorrow checklist
+- untouched categories
+- user note
+- grouped change summary
 
-### Session Mode
+### Cross-session memory
 
-A label describing the arc of the session, derived from event density across three time phases.
+Worktrace stores compact session history in `.worktrace/sessions.json` and uses it for:
 
-Examples:
-- `Exploration → Deep Focus → Winding Down`
-- `Scaffolding → Iteration`
-- `Quick Sprint`
+- churn hotspot detection
+- recurring friction detection
+- recent branch awareness
+- carrying forward open TODOs
+- startup "where I left off" prompts
 
-### Session Confidence
+### Project context / continuity
 
-A `Low` / `Medium` / `High` score based on:
+Worktrace maintains `sessions/context.md` as a reusable project context block.
 
-- TODO/FIXME markers added during the session
-- Debug statements left in code (`console.log`, `print()`, etc.)
-- Size of uncommitted diff
-- High iteration counts on single files
-- Create-delete cycles
+- Local fallback generation exists in the extension.
+- AI generation exists in the backend.
+- The context is designed to be pasted into any AI tool manually.
 
-### Where I Got Stuck (Friction Log)
+### Search and review flows
 
-Identifies friction points from behavioral signals:
+Current commands let the user:
 
-- **Rapid save bursts**: 3+ saves within 60 seconds on the same file
-- **Heavy iteration**: 5+ saves on a single file
-- **Create-delete cycles**: Files created then deleted (experimentation)
-- **Long gaps**: 10+ minutes between events (debugging/deep thinking)
+- search prior sessions by file, branch, mode, or intent keywords
+- open the current project context document
+- copy project context to the clipboard
+- run a diff-based safety check on current changes
 
-### Tomorrow, First 10 Minutes
+### Proof-of-work surfaces
 
-A rules-based checklist for the next session:
+The repo already includes:
 
-1. Reopen the last edited file
-2. Remove debug statements (if any were added)
-3. Address TODO/FIXME markers (if any were added)
-4. Review large uncommitted changes (if diff > 200 lines)
+- Markdown session logs in `sessions/`
+- shareable image cards for signed-in users
+- streak and per-day card data backed by saved session metadata in Firestore
 
-### What I Explicitly Didn't Touch
+This is a narrower implementation than the roadmap's full reports, timelines, and exports.
 
-Lists major file categories that were **not** modified:
+## Local vs Signed-In Behavior
 
-- Tests
-- Documentation
-- Configuration files
-- UI/styling
+### Local-only mode
 
-This serves as an anti-anxiety signal — knowing what you deliberately left alone.
+Without backend auth, Worktrace still provides:
 
-### My Note
+- session capture
+- deterministic summaries
+- local project context generation
+- `.worktrace` memory
+- history search
+- safety scan
 
-User-authored notes added during the session via the "Add Session Note" command. This is the only section containing direct human intent rather than inferred behavior.
+### Signed-in mode
 
-## Offline vs Online Mode
+With a working backend and Google sign-in, Worktrace also provides:
 
-### Offline (Default)
+- AI session summaries
+- AI project context generation
+- shareable card generation
+- usage quota enforcement
+- display name sync
 
-The extension generates a complete summary locally using deterministic analysis. No network calls are made. The summary includes all sections above with behavioral data.
+If backend calls fail, Worktrace falls back to local summary/context generation.
 
-### Online (Signed In)
+## Files Written to the Workspace
 
-When the user is signed in via Google Auth and the backend is reachable:
+```text
+sessions/
+  session-YYYY-MM-DD_HH-MM-SS.md
+  context.md
+  card-YYYY-MM-DD.png
 
-1. The extension sends the full enriched session payload to the backend
-2. The backend uses Vertex AI (Gemini 2.5) to generate a polished summary
-3. The AI summary replaces the local one
-
-The AI summary benefits from full file context:
-- Created files include their entire content, so the model can describe what was built
-- Updated files include both the diff and full current state, so changes are understood in context
-- Deleted files include a list of affected dependents, so the model explains the impact
-
-### Graceful Fallback
-
-If the backend is unreachable, the token is expired and can't be refreshed, or the user has exceeded their plan quota, the extension silently falls back to the local deterministic summary. No error is shown to the user — the session file is always produced.
-
-## Language & Framework Agnosticism
-
-The extension works with any project type:
-
-- **Frontend**: React, Vue, Svelte, Angular, Next.js
-- **Backend**: Node.js, Express, Spring Boot, Django, Flask, Go, Rust
-- **Mobile**: Swift, Dart/Flutter, Kotlin
-- **Blockchain**: Solidity, Move, Cairo
-- **Systems**: C, C++, Rust
-- **Scripting**: Python, Ruby, PHP
-
-File classification groups files into categories (Logic, UI, Config, Docs, Test, Other) based on extension and path patterns, covering all major ecosystems.
-
-## Session Output
-
-Session summaries are saved to `.cursor-sessions/` in the workspace root:
-
-```
-.cursor-sessions/
-  session-2026-02-22_14-30-00.md
-  session-2026-02-21_09-15-00.md
-  session-2026-02-20_16-45-00.md
+.worktrace/
+  sessions.json
 ```
 
-Each file is a standalone Markdown document that can be:
-- Read directly in the editor
-- Committed to version control as a development log
-- Searched later for past session context
-- Used for standup notes or retrospectives
+## Current Limitations
+
+The following roadmap items are not implemented yet:
+
+- `worktrace-agent`
+- CLI commands such as `worktrace start`, `worktrace end`, `worktrace context`, `worktrace usage`
+- automatic prompt enhancement or outbound prompt wrapping
+- provider usage collection for Codex, Claude, Gemini, Cursor, or local cost scans
+- project-configurable safety rules in `.worktrace/rules.yml`
+- dependency-risk checks and scope-creep detection
+- web dashboard, metadata sync UI, team views, exports, reports, or digests

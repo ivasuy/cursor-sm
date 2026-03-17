@@ -118,6 +118,39 @@ This keeps the cloud backend focused on metadata and AI enhancement, while the l
 | Phase 4 | Web dashboard, cloud metadata sync, agent-backed usage timeline | Visualization + teams |
 | Phase 5 | Team features, exportable reports, billing | Monetization |
 
+## Current Repo Reality Check
+
+This section reflects what is implemented in the codebase today. It is intentionally separate from the product direction above.
+
+### Implemented in the repo today
+
+- Worktrace-branded VS Code / Cursor extension with a multi-file architecture
+- Local session tracking with deterministic summaries
+- Basic diff-based safety scanning
+- Local `.worktrace` session store for cross-session memory
+- Startup "where I left off" prompt based on recent local session history
+- `sessions/context.md` generation for continuity / context injection
+- Session history search from the extension
+- Optional backend-powered AI session summaries
+- Optional backend-powered AI project context generation
+- Shareable session cards
+
+### Partial or narrower than the vision
+
+- Proof of work exists as Markdown session logs, shareable cards, streaks, and saved backend session metadata, but not as timelines, exports, or reports
+- Cloud support exists for auth, usage limits, profile data, and saved session metadata, but not as full metadata sync or dashboard infrastructure
+- Safety monitoring exists as a basic scan and notification flow, but not as configurable project rules, dependency intelligence, or scope-creep detection
+
+### Not implemented yet
+
+- `worktrace-agent`
+- `worktrace` CLI
+- prompt enhancer / outbound prompt wrapping
+- provider usage intelligence and adapter model
+- cross-platform provider collectors
+- web dashboard
+- team views, reports, exports, and billing
+
 ## Execution Plan
 
 ### Step 1 - Build `worktrace-agent` as the local runtime
