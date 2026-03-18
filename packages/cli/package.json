@@ -1,0 +1,26 @@
+{
+  "name": "worktrace",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "worktrace": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "@worktrace/agent": "*",
+    "commander": "^13.1.0",
+    "ora": "^8.1.1",
+    "chalk": "^5.4.1",
+    "gradient-string": "^3.0.0",
+    "cli-table3": "^0.6.5",
+    "boxen": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/gradient-string": "^1.1.6",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

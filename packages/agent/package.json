@@ -1,0 +1,26 @@
+{
+  "name": "@worktrace/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "exports": {
+    ".": "./dist/server.js",
+    "./daemon": "./dist/daemon.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "chokidar": "^4.0.3",
+    "open": "^10.1.0",
+    "chalk": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
