@@ -158,37 +158,195 @@ worktrace card --date 2026-03-15   # Card for specific date
 - `-h, --help` — show help
 - `-v, --version` — show version
 
-### CLI Aesthetics
+### CLI Aesthetics — Matrix Terminal Vibe
 
-Modern terminal UX inspired by Claude Code, Codex CLI, and Cursor CLI:
+Dark, cinematic terminal aesthetic. Think the Matrix operator console meets a modern dev tool. The CLI should feel alive — like a system that's watching, thinking, and reporting back.
 
-- **Spinners** — `ora` animated spinners during async operations
-- **Step-by-step progress** — multi-stage operations show incremental steps:
-  ```
-  ◐ Collecting file events...
-  ✓ Collected 12 file events across 4 files
-  ◐ Running git diff...
-  ✓ 147 lines added, 23 removed
-  ◐ Analyzing session...
-  ✓ Session mode: Deep Focus → Active Iteration
-  ◐ Running safety scan...
-  ⚠ 2 warnings detected
-  ◐ Generating summary...
-  ✓ Summary written to sessions/session-2026-03-18_14-30-00.md
-  ```
-- **Boxed output** — key info in bordered boxes using box-drawing characters
-- **Colored labels** — green (success), yellow (warnings), red (critical), dim gray (secondary)
-- **Gradient headers** — subtle gradient on `worktrace` banner via `gradient-string`
-- **Clean tables** — aligned tables for status/history via `cli-table3`
-- **No emoji** — clean typography only
-- **Respects `NO_COLOR`** and `TERM=dumb` environments
+**Color palette:**
+- **Primary green** (`#00FF41`) — Matrix green for success states, active data, and key metrics
+- **Dim green** (`#0D4D1A`) — for background text, secondary info, subtle decorations
+- **Amber** (`#FFB000`) — warnings, caution states
+- **Red** (`#FF0040`) — critical alerts, safety violations
+- **Cool white** (`#D0D0D0`) — body text
+- **Dark gray** (`#333`) — borders, separators, inactive elements
+
+**Visual elements:**
+- **Matrix rain intro** — on first run / `worktrace start`, a brief (0.5s) cascade of falling green characters before the main output. Subtle, not overwhelming. Uses `chalk` + rapid console writes.
+- **Typing effect** — short interactive messages print character-by-character with a slight delay (15-30ms per char), like a system talking to you. Only on key messages, not on data output.
+- **Glitch transitions** — between major steps, a quick 1-2 frame "glitch" effect (randomized characters that resolve into the real text). Adds personality without slowing things down.
+- **Animated spinners** — `ora` spinners with custom Matrix-green frames: `['▰▱▱▱▱', '▰▰▱▱▱', '▰▰▰▱▱', '▰▰▰▰▱', '▰▰▰▰▰', '▱▰▰▰▰', '▱▱▰▰▰', '▱▱▱▰▰', '▱▱▱▱▰']` or similar pulsing bar.
+- **Boxed output** — bordered panels using box-drawing characters with green borders for info, amber for warnings, red for critical.
+- **Gradient headers** — `gradient-string` with green-to-cyan gradient on the `worktrace` banner.
+- **Clean tables** — `cli-table3` with dim green borders, bright green headers.
+- **No emoji** — clean typography only. Unicode box-drawing and block characters for visual flair.
+- **Respects `NO_COLOR`** and `TERM=dumb` — all effects disabled, plain text fallback.
+
+**Interactive messages — the CLI has personality:**
+
+Short, randomized messages that appear between steps. They make the tool feel alive and fun without being annoying. Pool of ~5-10 variants per event, randomly selected.
+
+On `worktrace start`:
+```
+  ┌──────────────────────────────────────────────────┐
+  │                                                  │
+  │   w o r k t r a c e                              │
+  │   ─────────────────                              │
+  │   the matrix sees your code now.                 │
+  │                                                  │
+  │   session:  wt_8f3a2b                            │
+  │   branch:   feat/auth-flow                       │
+  │   watching: /Users/dev/myproject                 │
+  │   started:  14:30:00                             │
+  │                                                  │
+  │   > every keystroke is being recorded.           │
+  │                                                  │
+  └──────────────────────────────────────────────────┘
+```
+
+Start message variants (randomly picked):
+- `"the matrix sees your code now."`
+- `"jacking in. signal locked."`
+- `"trace initialized. the watchers are live."`
+- `"you're in. make it count."`
+- `"connection established. tracking active."`
+
+On `worktrace end` (step-by-step with personality):
+```
+  ◐ intercepting file events...
+  ✓ 12 events captured across 4 files
+
+  ◐ decoding git diff...
+  ✓ +147 / -23 lines — the diff doesn't lie.
+
+  ◐ running analysis...
+  ✓ Deep Focus → Active Iteration — you were locked in.
+
+  ◐ scanning for anomalies...
+  ⚠ 2 warnings detected — something doesn't smell right.
+
+  ◐ rendering session memory...
+  ✓ sessions/session-2026-03-18_14-30-00.md
+
+  > "not bad. the machine remembers everything."
+```
+
+End message variants:
+- `"not bad. the machine remembers everything."`
+- `"session archived. the trace is permanent."`
+- `"logged, sealed, remembered. see you next time."`
+- `"the record is clean. or is it?"`
+- `"another session in the book. the matrix grows."`
+
+On `worktrace status`:
+```
+  ┌─ SESSION ACTIVE ──────────────────────────┐
+  │                                           │
+  │  duration    01h 42m 15s                  │
+  │  branch      feat/auth-flow               │
+  │  files       7 touched                    │
+  │  saves       34 total                     │
+  │  events      89 captured                  │
+  │                                           │
+  │  > the system is watching. keep going.    │
+  │                                           │
+  └───────────────────────────────────────────┘
+```
+
+Status message variants:
+- `"the system is watching. keep going."`
+- `"still tracing. you're doing fine."`
+- `"signal strong. session active."`
+- `"the watchers report: all systems nominal."`
+
+On `worktrace check` (safety):
+```
+  ◐ scanning for threats...
+
+  ┌─ ANOMALY DETECTED ───────────────────────────────┐
+  │                                                   │
+  │  CRITICAL  Hardcoded API key found                │
+  │            src/config.ts:23                        │
+  │            > const key = "sk-proj-abc123..."       │
+  │                                                   │
+  │  WARNING   Unsafe code pattern detected           │
+  │            src/utils.ts:45                         │
+  │            > dynamic code execution found          │
+  │                                                   │
+  │  WARNING   Scope creep — 18 files modified        │
+  │            Expected focused change, got sprawl     │
+  │                                                   │
+  │  > "i'd fix those before someone else finds them." │
+  │                                                   │
+  └───────────────────────────────────────────────────┘
+```
+
+Safety message variants (when issues found):
+- `"i'd fix those before someone else finds them."`
+- `"the scan found something. you should look."`
+- `"red flags detected. your call, operator."`
+- `"anomalies in the codebase. proceed with caution."`
+
+Safety message variants (clean scan):
+- `"scan complete. the codebase is clean. for now."`
+- `"no anomalies. the code checks out."`
+- `"all clear. the matrix approves."`
+
+On `worktrace login`:
+```
+  ◐ opening secure channel...
+  ✓ browser launched — complete sign-in to authenticate.
+  ◐ waiting for credentials...
+  ✓ identity confirmed.
+
+  > "welcome back, vasu. the system recognizes you."
+```
+
+On `worktrace history`:
+```
+  ┌─ SESSION ARCHIVE ────────────────────────────────────────────────┐
+  │                                                                  │
+  │  #  Date        Duration  Branch            Mode     Files  +/-  │
+  │  ── ──────────  ────────  ────────────────  ───────  ─────  ──── │
+  │  1  2026-03-18  01h 42m   feat/auth-flow    focused    7   +147  │
+  │  2  2026-03-17  02h 10m   fix/card-render   debug      4    +53  │
+  │  3  2026-03-16  00h 55m   main              explore   12   +210  │
+  │  4  2026-03-15  03h 20m   feat/safety       focused    9   +340  │
+  │                                                                  │
+  │  > "4 sessions recovered from the archive."                      │
+  │                                                                  │
+  └──────────────────────────────────────────────────────────────────┘
+```
+
+On `worktrace context`:
+- No box, no personality — outputs raw markdown to stdout for piping. This is a utility command. Clean output only.
+
+On `worktrace card`:
+```
+  ◐ generating session card...
+  ✓ card saved to sessions/2026-03-18_card.png
+
+  > "your proof of work. share it with the world."
+```
+
+**Implementation notes:**
+- All personality messages stored in a `messages.ts` module — arrays of variants per event, selected via `Math.random()`
+- Typing effect is a simple `async` function that writes char-by-char with `process.stdout.write()` + `setTimeout`
+- Matrix rain is a brief animation on `start` only — ~20 columns of random katakana/latin chars falling for 0.5s then clearing
+- Glitch effect: print a line of random chars, wait 50ms, overwrite with real text via `\r` carriage return
+- All effects respect `--no-color` flag and `NO_COLOR` env — when disabled, output is plain with no delays
+- Effects also disabled when `--json` flag is used
+- Keep all animations fast — total added delay per command should be under 1s. The tool should feel snappy, not slow.
 
 ### Help Screen
 
 ```
-  ┌─────────────────────────────────────────┐
-  │  worktrace — track your dev sessions    │
-  └─────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────┐
+  │                                              │
+  │   w o r k t r a c e                          │
+  │   ─────────────────                          │
+  │   the operating system for AI-assisted dev   │
+  │                                              │
+  └──────────────────────────────────────────────┘
 
   Usage: worktrace <command> [options]
 
@@ -196,18 +354,20 @@ Modern terminal UX inspired by Claude Code, Codex CLI, and Cursor CLI:
     start       Start tracking a session
     end         End session and generate summary
     status      Show current session stats
-    context     Print project context
+    context     Print project context (stdout, pipeable)
     history     Browse past sessions
-    check       Run safety scan
+    check       Run safety scan on uncommitted changes
     note        Add note to active session
     login       Sign in with Google
     card        Generate shareable session card
 
   Global:
-    --no-color  Disable colors
-    --json      Output as JSON
+    --no-color  Disable colors and animations
+    --json      Output as JSON (no effects)
     -h, --help  Show help
     -v          Show version
+
+  > "type a command. the system is ready."
 ```
 
 ## VS Code API Decoupling Requirements
