@@ -425,7 +425,11 @@ authRouter.get("/google", (req, res) => {
           userId: user.uid,
         });
 
-        const callbackUrl = scheme + '://local.worktrace/auth-callback?' + params.toString();
+        const urlParams = new URLSearchParams(window.location.search);
+        const redirectUrl = urlParams.get('redirect');
+        const callbackUrl = redirectUrl
+          ? redirectUrl + '?' + params.toString()
+          : scheme + '://local.worktrace/auth-callback?' + params.toString();
 
         document.querySelector('.form-card').innerHTML = \`
           <div class="form-header">
