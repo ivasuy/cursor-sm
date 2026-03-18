@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the architecture that exists in the repo today. The bigger platform in `product-pivot.md` includes a future local agent, CLI, and provider-usage intelligence, but those parts are not implemented yet.
+This document describes the architecture that exists in the repo today. The bigger platform in `PRODUCT_ROADMAP.md` includes a future local agent, CLI, and provider-usage intelligence, but those parts are not implemented yet.
 
 ## Current System Topology
 
@@ -44,6 +44,7 @@ graph TB
 
 The extension is the primary runtime today.
 
+- The extension package lives in `extension/`.
 - Activates on `onStartupFinished`.
 - Starts per-workspace session tracking immediately.
 - Shows a recent-session "where I left off" prompt when local memory exists.

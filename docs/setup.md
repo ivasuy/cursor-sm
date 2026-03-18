@@ -11,7 +11,7 @@ It does not cover the future `worktrace-agent`, CLI, dashboard, or provider usag
 
 | Component | Required | Role |
 | --- | --- | --- |
-| Extension (`src/`) | Yes | Local tracking, deterministic summaries, local memory, safety scan, history search |
+| Extension (`extension/src/`) | Yes | Local tracking, deterministic summaries, local memory, safety scan, history search |
 | Backend (`backend/`) | No | Google auth, AI summaries, AI project context, cards, usage tracking |
 
 The extension works offline. The backend is only needed for signed-in / AI features.
@@ -26,13 +26,14 @@ The extension works offline. The backend is only needed for signed-in / AI featu
 ### Install and run
 
 ```bash
+cd extension
 npm install
 npm run compile
 npm run package
 ```
 
-- `npm run package` produces `worktrace-0.2.0.vsix`.
-- Press `F5` in VS Code / Cursor to launch the Extension Development Host.
+- `npm run package` produces `worktrace-0.2.0.vsix` inside `extension/`.
+- Open `extension/` in VS Code / Cursor and press `F5` to launch the Extension Development Host.
 
 ### Extension configuration
 
@@ -144,6 +145,7 @@ If Firebase credentials are missing, the backend still serves `/health` and `/ap
 ### VSIX packaging
 
 ```bash
+cd extension
 npm run package
 code --install-extension worktrace-0.2.0.vsix
 ```
@@ -161,7 +163,3 @@ After deployment, set `worktrace.backendUrl` in editor settings to your deployed
 ### Docker
 
 For local containerized backend setup, see [docker.md](docker.md).
-
-## License
-
-MIT

@@ -1,0 +1,9 @@
+# Development
+.git
+.gitignore
+*.vsix
+.cursor-sessions/
+**/*.map
+src/
+tsconfig.json
+package-lock.json

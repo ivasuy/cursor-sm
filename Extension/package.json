@@ -1,0 +1,100 @@
+{
+  "name": "worktrace",
+  "displayName": "Worktrace",
+  "description": "The operating system for AI-assisted development — session tracking, safety monitoring, and proof of work.",
+  "version": "0.2.0",
+  "publisher": "local",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ivasuy/cursor-sm.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "worktrace.endSession",
+        "title": "Worktrace: End Session & Generate Summary"
+      },
+      {
+        "command": "worktrace.addSessionNote",
+        "title": "Worktrace: Add Session Note"
+      },
+      {
+        "command": "worktrace.signIn",
+        "title": "Worktrace: Sign In with Google"
+      },
+      {
+        "command": "worktrace.signOut",
+        "title": "Worktrace: Sign Out"
+      },
+      {
+        "command": "worktrace.setDisplayName",
+        "title": "Worktrace: Set Display Name"
+      },
+      {
+        "command": "worktrace.generateCard",
+        "title": "Worktrace: Generate Shareable Card"
+      },
+      {
+        "command": "worktrace.runSafetyCheck",
+        "title": "Worktrace: Run Safety Check"
+      },
+      {
+        "command": "worktrace.showContext",
+        "title": "Worktrace: Show Session Context"
+      },
+      {
+        "command": "worktrace.searchHistory",
+        "title": "Worktrace: Search Session History"
+      }
+    ],
+    "configuration": {
+      "title": "Worktrace",
+      "properties": {
+        "worktrace.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Backend API URL for AI-powered summaries."
+        },
+        "worktrace.firebaseApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Web API key for token refresh (set once during setup)."
+        },
+        "worktrace.displayName": {
+          "type": "string",
+          "default": "",
+          "description": "Your display name shown on shareable session cards."
+        },
+        "worktrace.safetyMonitor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable real-time safety monitoring for AI-generated code changes."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "package": "vsce package --allow-missing-repository",
+    "lint": "echo \"No lint configured\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.5",
+    "@vscode/vsce": "^3.7.1"
+  }
+}

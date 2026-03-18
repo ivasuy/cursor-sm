@@ -9,10 +9,11 @@ This guide only covers the optional backend. The extension itself does not need 
 
 ## One-Time Setup
 
-### 1. Create `backend/.env`
+### 1. Create `.env`
 
 ```bash
-cp backend/.env.example backend/.env
+cd backend
+cp .env.example .env
 ```
 
 Fill in the Firebase and Vertex AI values required by your environment.
@@ -37,19 +38,28 @@ backend/secrets/
 
 ## How the Compose Setup Works
 
-- `docker-compose.yml` builds the backend image from `backend/Dockerfile`.
-- `env_file: ./backend/.env` injects runtime environment variables.
-- `./backend/secrets:/app/secrets:ro` mounts the secret JSON files read-only.
+- `backend/docker-compose.yml` builds the backend image from `backend/Dockerfile`.
+- `env_file: ./.env` injects runtime environment variables.
+- `./secrets:/app/secrets:ro` mounts the secret JSON files read-only.
 - The backend listens on `http://localhost:3000`.
 
 ## Start and Stop
 
-From the repo root:
+From `backend/`:
 
 ```bash
+cd backend
 docker compose up -d
 docker compose logs -f backend
 docker compose down
+```
+
+If you want to run it from the repo root instead, use:
+
+```bash
+docker compose -f backend/docker-compose.yml up -d
+docker compose -f backend/docker-compose.yml logs -f backend
+docker compose -f backend/docker-compose.yml down
 ```
 
 ## Verify the Backend
@@ -71,8 +81,8 @@ Expected behavior:
 | --- | --- |
 | `503` from Firebase-backed routes | Confirm `backend/secrets/cursor.json` exists and matches `FIREBASE_SERVICE_ACCOUNT_PATH` |
 | Vertex generation errors | Confirm `backend/secrets/service.json` exists and has Vertex AI access |
-| Wrong env values in container | Confirm `backend/.env` exists and `docker compose` is started from the repo root |
-| Port 3000 is busy | Change the host port mapping in `docker-compose.yml` |
+| Wrong env values in container | Confirm `backend/.env` exists and either run `docker compose` from `backend/` or pass `-f backend/docker-compose.yml` from the repo root |
+| Port 3000 is busy | Change the host port mapping in `backend/docker-compose.yml` |
 
 ## Security Notes
 

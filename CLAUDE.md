@@ -8,27 +8,28 @@ Worktrace — "The operating system for AI-assisted development." A VS Code/Curs
 
 ## Architecture
 
-Two independent components with separate dependency trees:
+Three independent components with separate dependency trees:
 
-- **Extension** (`src/`) — Multi-file VS Code extension. Tracks file events, computes git diffs, runs deterministic session analysis, safety monitoring, and renders Markdown summaries. Works fully offline. When signed in, sends enriched session data to the backend for AI-powered summaries.
-- **Backend** (`backend/`) — Express server with Firebase Auth, Firestore for user/plan/usage data, and Vertex AI for summary generation. Starts in degraded mode (503 on auth/session routes) if Firebase service account is missing.
+- **Extension** (`Extension/src/`) — Multi-file VS Code extension. Tracks file events, computes git diffs, runs deterministic session analysis, safety monitoring, and renders Markdown summaries. Works fully offline. When signed in, sends enriched session data to the backend for AI-powered summaries.
+- **Backend** (`Backend/`) — Express server with Firebase Auth, Firestore for user/plan/usage data, and Vertex AI for summary generation. Starts in degraded mode (503 on auth/session routes) if Firebase service account is missing.
+- **CLI + Agent** (`CLI/`) — npm workspaces monorepo containing `@worktrace/agent` (local daemon on port 9315) and `worktrace` CLI (terminal client). The agent owns session lifecycle, analysis, safety, memory, and context. The CLI is a thin HTTP client with Matrix-themed terminal UX.
 
 ### Extension Module Structure
 
 | Module | Purpose |
 | --- | --- |
-| `src/extension.ts` | Entry point — activate/deactivate, command registration, event listeners |
-| `src/types.ts` | All shared TypeScript types |
-| `src/constants.ts` | Constants, excluded file patterns |
-| `src/session-manager.ts` | `SessionManager` class — per-workspace session state |
-| `src/analysis.ts` | Session analysis — mode detection, friction, confidence, work intent |
-| `src/delta-builder.ts` | Builds structured session delta from events + git diff |
-| `src/git.ts` | Git operations — diff, branch |
-| `src/file-utils.ts` | File classification, content reading, affected file search |
-| `src/renderer.ts` | Markdown summary rendering |
-| `src/safety-monitor.ts` | Safety scanning — secrets, unsafe code, scope creep detection |
-| `src/auth.ts` | Auth flow, backend communication |
-| `src/workspace.ts` | VS Code workspace utility functions |
+| `extension/src/extension.ts` | Entry point — activate/deactivate, command registration, event listeners |
+| `extension/src/types.ts` | All shared TypeScript types |
+| `extension/src/constants.ts` | Constants, excluded file patterns |
+| `extension/src/session-manager.ts` | `SessionManager` class — per-workspace session state |
+| `extension/src/analysis.ts` | Session analysis — mode detection, friction, confidence, work intent |
+| `extension/src/delta-builder.ts` | Builds structured session delta from events + git diff |
+| `extension/src/git.ts` | Git operations — diff, branch |
+| `extension/src/file-utils.ts` | File classification, content reading, affected file search |
+| `extension/src/renderer.ts` | Markdown summary rendering |
+| `extension/src/safety-monitor.ts` | Safety scanning — secrets, unsafe code, scope creep detection |
+| `extension/src/auth.ts` | Auth flow, backend communication |
+| `extension/src/workspace.ts` | VS Code workspace utility functions |
 
 Key data flow: Extension collects file events → `buildSessionDelta()` reads full file content + git diff → `analyzeSession()` runs deterministic analysis → `runSafetyCheck()` scans for issues → `renderSessionMemory()` produces local summary → optionally replaced by AI summary from backend.
 
@@ -36,12 +37,13 @@ Key data flow: Extension collects file events → `buildSessionDelta()` reads fu
 
 ### Extension
 ```bash
+cd extension
 npm install          # Install extension dependencies
 npm run compile      # TypeScript compile (tsc -p .)
 npm run watch        # Watch mode (tsc -w -p .)
 npm run package      # Package as .vsix (vsce package)
 ```
-Test locally: Press `F5` in VS Code/Cursor to launch Extension Development Host.
+Test locally: Open `extension/` in VS Code/Cursor and press `F5` to launch Extension Development Host.
 
 ### Backend
 ```bash
@@ -52,10 +54,35 @@ npm run build        # TypeScript compile
 npm run start        # Run compiled JS (node dist/index.js)
 ```
 
+### CLI + Agent
+```bash
+cd CLI
+npm install          # Install workspace dependencies
+npm run build --workspaces  # Build agent + CLI
+node packages/cli/dist/index.js start  # Run CLI locally
+```
+
 ### Docker
 ```bash
-docker-compose up    # Runs backend on port 3000, mounts backend/.env and backend/secrets/
+cd backend
+docker compose up    # Runs backend on port 3000 and mounts .env plus secrets/
 ```
+
+## Agent Routes
+
+Local daemon on `127.0.0.1:9315`:
+- `GET /health` — agent health check
+- `POST /session/start` — start session tracking for a workspace
+- `POST /session/end` — end session, run full pipeline (delta → analysis → safety → render)
+- `POST /session/note` — add note to active session
+- `GET /session/status` — current session status
+- `GET /context` — generate continuity context for a workspace
+- `GET /history` — search past sessions
+- `POST /safety/check` — run safety scan on uncommitted changes
+- `POST /auth/login` — OAuth login flow
+- `GET /auth/status` — current auth status
+- `POST /card/generate` — generate shareable session card
+- `PATCH /profile` — update display name
 
 ## Backend Environment
 

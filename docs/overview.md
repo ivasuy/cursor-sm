@@ -1,6 +1,6 @@
 # Feature Overview
 
-This file covers what Worktrace currently does in the repo today. It is intentionally narrower than the long-term roadmap in `product-pivot.md`.
+This file covers what Worktrace currently does in the repo today. It is intentionally narrower than the long-term roadmap in `PRODUCT_ROADMAP.md`.
 
 ## Signals Worktrace Tracks
 

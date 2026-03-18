@@ -20,7 +20,7 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
-# Secrets and .env are injected at runtime via docker-compose (volume + env_file)
+# Secrets and .env are injected at runtime via Docker Compose (volume + env_file)
 # Do NOT copy .env or secrets/ into the image — they stay on the host
 
 EXPOSE 3000

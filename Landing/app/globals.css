@@ -1,0 +1,158 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Worktrace design tokens based on the backend auth palette */
+:root {
+  --background: #0a0a0a;
+  --foreground: #e0e0e0;
+  --card: #111110;
+  --card-foreground: #e0e0e0;
+  --popover: #0d0d0d;
+  --popover-foreground: #e0e0e0;
+  --primary: #f2f2ee;
+  --primary-foreground: #0a0a0a;
+  --secondary: #171715;
+  --secondary-foreground: #cfcfca;
+  --muted: #1e1e1c;
+  --muted-foreground: #8a8a84;
+  --accent: #f2f2ee;
+  --accent-foreground: #0a0a0a;
+  --destructive: #ff6b6b;
+  --destructive-foreground: #0a0a0a;
+  --border: #2a2a28;
+  --input: #171715;
+  --ring: #f2f2ee;
+  --radius: 1rem;
+  --sidebar: #0d0d0d;
+  --sidebar-foreground: #e0e0e0;
+  --sidebar-primary: #f2f2ee;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #171715;
+  --sidebar-accent-foreground: #e0e0e0;
+  --sidebar-border: #2a2a28;
+  --sidebar-ring: #f2f2ee;
+}
+
+@theme inline {
+  --font-sans: "Inter", "Inter Fallback", sans-serif;
+  --font-mono: "IBM Plex Mono", "IBM Plex Mono Fallback", monospace;
+  --font-display: "Bebas Neue", "Bebas Neue Fallback", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    overflow-x: hidden;
+    max-width: 100vw;
+    /* Apply scrollbar styles to html element */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(0, 0%, 24%) hsl(0, 0%, 8%);
+  }
+  body {
+    @apply bg-background text-foreground;
+    overflow-x: hidden;
+    max-width: 100vw;
+    background:
+      radial-gradient(circle at 84% 18%, rgba(255, 255, 255, 0.08), transparent 24%),
+      radial-gradient(circle at 16% 82%, rgba(255, 255, 255, 0.05), transparent 20%),
+      linear-gradient(180deg, #0a0a0a 0%, #0d0d0d 50%, #121210 100%);
+    scrollbar-width: thin;
+    scrollbar-color: hsl(0, 0%, 24%) hsl(0, 0%, 8%);
+  }
+  /* Webkit scrollbar styling for html and body */
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    width: 10px;
+  }
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track {
+    background: hsl(0, 0%, 8%);
+  }
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb {
+    background: hsl(0, 0%, 24%);
+    border-radius: 0px;
+  }
+  html::-webkit-scrollbar-thumb:hover,
+  body::-webkit-scrollbar-thumb:hover {
+    background: hsl(0, 0%, 32%);
+  }
+}
+
+/* Custom noise texture overlay */
+.noise-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+/* Grid background pattern */
+.grid-bg {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.page-glow-bg {
+  background:
+    radial-gradient(circle at 78% 22%, rgba(255, 255, 255, 0.08), transparent 20%),
+    radial-gradient(circle at 18% 74%, rgba(255, 255, 255, 0.05), transparent 24%);
+  filter: blur(18px);
+}
+
+.scanline-bg {
+  background: repeating-linear-gradient(
+    180deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.015) 2px,
+    rgba(255, 255, 255, 0.015) 4px
+  );
+}
+
+/* Custom selection color */
+::selection {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
