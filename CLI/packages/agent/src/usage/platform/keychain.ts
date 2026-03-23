@@ -11,17 +11,62 @@ const execFileAsync = promisify(execFile);
 
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
 
-interface ClaudeCredentials {
+/** Shape of the Keychain / credentials file JSON. */
+interface ClaudeCredentialsFile {
+  claudeAiOauth?: {
+    accessToken?: string;
+    refreshToken?: string;
+    expiresAt?: number;
+    scopes?: string[];
+    subscriptionType?: string;
+    rateLimitTier?: string;
+  };
+  // Legacy flat format (just in case)
   accessToken?: string;
-  refreshToken?: string;
-  [key: string]: unknown;
+}
+
+export interface ClaudeOAuthInfo {
+  accessToken: string;
+  subscriptionType: string | null;
+  rateLimitTier: string | null;
 }
 
 /**
- * Attempt to read the Claude Code OAuth access token from macOS Keychain.
- * Returns null if not on macOS, the entry doesn't exist, or parsing fails.
+ * Parse the Claude credentials JSON and extract the OAuth info.
+ * Handles both the nested `claudeAiOauth` format and legacy flat format.
  */
-async function readFromKeychain(): Promise<string | null> {
+function parseCredentials(raw: string): ClaudeOAuthInfo | null {
+  try {
+    const parsed: ClaudeCredentialsFile = JSON.parse(raw);
+
+    // Nested format (current Claude Code)
+    if (parsed.claudeAiOauth?.accessToken) {
+      return {
+        accessToken: parsed.claudeAiOauth.accessToken,
+        subscriptionType: parsed.claudeAiOauth.subscriptionType ?? null,
+        rateLimitTier: parsed.claudeAiOauth.rateLimitTier ?? null,
+      };
+    }
+
+    // Legacy flat format
+    if (parsed.accessToken) {
+      return {
+        accessToken: parsed.accessToken,
+        subscriptionType: null,
+        rateLimitTier: null,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read from macOS Keychain (primary source).
+ */
+async function readFromKeychain(): Promise<ClaudeOAuthInfo | null> {
   if (process.platform !== 'darwin') return null;
 
   try {
@@ -33,40 +78,44 @@ async function readFromKeychain(): Promise<string | null> {
 
     const raw = stdout.trim();
     if (!raw) return null;
-
-    const parsed: ClaudeCredentials = JSON.parse(raw);
-    return parsed.accessToken ?? null;
+    return parseCredentials(raw);
   } catch {
     return null;
   }
 }
 
 /**
- * Attempt to read the Claude Code OAuth access token from the fallback
- * credentials file at ~/.claude/.credentials.json.
+ * Read from the credentials file at ~/.claude/.credentials.json (fallback).
  */
-async function readFromCredentialsFile(): Promise<string | null> {
+async function readFromCredentialsFile(): Promise<ClaudeOAuthInfo | null> {
   try {
     const filePath = claudeCredentialsPath();
     const raw = await readFile(filePath, 'utf8');
-    const parsed: ClaudeCredentials = JSON.parse(raw);
-    return parsed.accessToken ?? null;
+    return parseCredentials(raw);
   } catch {
     return null;
   }
 }
 
 /**
- * Get the Claude Code OAuth access token.
+ * Get the Claude Code OAuth token and metadata.
  *
  * Strategy:
  * 1. On macOS, try the Keychain entry "Claude Code-credentials".
  * 2. Fall back to reading ~/.claude/.credentials.json.
  * 3. Return null if neither source yields a token.
  */
-export async function getClaudeOAuthToken(): Promise<string | null> {
-  const keychainToken = await readFromKeychain();
-  if (keychainToken) return keychainToken;
+export async function getClaudeOAuthInfo(): Promise<ClaudeOAuthInfo | null> {
+  const keychainInfo = await readFromKeychain();
+  if (keychainInfo) return keychainInfo;
 
   return readFromCredentialsFile();
+}
+
+/**
+ * Get just the OAuth access token (convenience wrapper).
+ */
+export async function getClaudeOAuthToken(): Promise<string | null> {
+  const info = await getClaudeOAuthInfo();
+  return info?.accessToken ?? null;
 }
