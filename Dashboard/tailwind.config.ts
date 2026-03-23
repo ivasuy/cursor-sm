@@ -12,9 +12,32 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-geist-mono)', 'Geist Mono', 'monospace'],
+      },
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+        /* Worktrace semantic tokens */
+        wt: {
+          base: '#08090d',
+          raised: '#0d0f16',
+          surface: '#121420',
+          hover: '#181b28',
+          active: '#1f2235',
+          accent: '#00e5a0',
+          'accent-bright': '#00ffb3',
+          warning: '#f0b429',
+          error: '#ff4d6a',
+          info: '#5b9aff',
+          success: '#00e5a0',
+          border: '#1c1e2e',
+          'fg-primary': '#e4e6f0',
+          'fg-secondary': '#a0a3b5',
+          'fg-muted': '#5c5f73',
+          'fg-faint': '#363849',
+        },
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',

@@ -43,45 +43,14 @@ Acceptance:
 - A project can change safety behavior without modifying source code
 - The extension and CLI surface warnings using merged default + project config
 
-## P1 - Add provider usage adapters
+### ~~P1 - Add provider usage adapters~~ DONE
+16-adapter framework with `BaseAdapter`, `ProviderUsage`, `AdapterCapabilities` types. 4 full CodexBar-parity adapters (Codex, Claude, Cursor, Copilot) with real API calls, OAuth token reading, and all rate-limit/cost/credits fields. 12 additional stub adapters. Auto-detection filters to installed-only providers.
 
-Why:
-- Usage intelligence is a Phase 3 differentiator and currently does not exist.
+### ~~P1 - Feed usage context back into Worktrace outputs~~ DONE
+CLI `worktrace usage` renders full provider cards with quota bars, reset countdowns, credits, costs. Web dashboard fetches from agent API and displays real-time usage data.
 
-What remains:
-- Define a normalized provider usage contract
-- Add adapter interfaces for provider capabilities, limits, reset windows, and costs
-- Implement first collectors for highest-value providers (Codex, Claude, Gemini, Cursor)
-
-Acceptance:
-- At least one provider can report normalized usage data through a shared adapter contract
-- Unsupported providers report explicit capability gaps instead of failing silently
-
-## P1 - Feed usage context back into Worktrace outputs
-
-Why:
-- Usage data has product value only when it affects summaries, continuity, and user decisions.
-
-What remains:
-- Add usage context to local summary rendering
-- Add usage context to project context generation
-- Decide how quota pressure, reset windows, and cost data appear in user-facing output
-
-Acceptance:
-- Summaries and context can include provider-usage context when available
-- Output still degrades cleanly when no provider data exists
-
-## P1 - Add `worktrace usage` CLI command
-
-Why:
-- Inspect local provider usage, cost, limits, remaining quota, and reset windows from the terminal.
-
-What remains:
-- Implement `usage` command in CLI
-- Wire to agent provider usage adapters (depends on P1 adapter work above)
-
-Acceptance:
-- `worktrace usage` shows normalized usage data for configured providers
+### ~~P1 - Add `worktrace usage` CLI command~~ DONE
+`worktrace usage` shows all installed providers with quota bars, remaining, plan, reset, cost. Subcommands: `detect`, `enable`, `disable`, `providers`. Supports `--refresh`, `--json`, `--all` flags.
 
 ## P2 - Build web dashboard and sync
 

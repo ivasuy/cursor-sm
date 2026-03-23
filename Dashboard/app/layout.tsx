@@ -1,14 +1,14 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Geist_Mono as GeistMono } from "next/font/google"
+import { Geist_Mono as GeistMono, Inter } from "next/font/google"
 import "./globals.css"
 
-const geistMono = GeistMono({ subsets: ["latin"] })
+const geistMono = GeistMono({ subsets: ["latin"], variable: "--font-geist-mono" })
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
-  title: "Tactical Operations Dashboard",
-  description: "Tactical command and control system",
-    generator: 'v0.app'
+  title: "Worktrace Dashboard",
+  description: "The operating system for AI-assisted development",
 }
 
 export default function RootLayout({
@@ -17,8 +17,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es">
-      <body className={`${geistMono.className} bg-black text-white antialiased`}>{children}</body>
+    <html lang="en" className="dark">
+      <body className={`${inter.variable} ${geistMono.variable} font-sans bg-[#08090d] text-[#e4e6f0] antialiased`}>
+        {children}
+      </body>
     </html>
   )
 }
