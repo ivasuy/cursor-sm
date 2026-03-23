@@ -4,11 +4,15 @@ import gradient from 'gradient-string';
 import Table from 'cli-table3';
 import boxen from 'boxen';
 
-const MATRIX_GREEN = '#00FF41';
-const DIM_GREEN = '#0D4D1A';
-const AMBER = '#FFB000';
-const RED = '#FF0040';
-const WHITE = '#D0D0D0';
+// Worktrace colour system — see colour.md
+const ACCENT = '#00e5a0';       // --accent (the trace)
+const ACCENT_BRIGHT = '#00ffb3'; // --accent-bright
+const FG_PRIMARY = '#e4e6f0';   // --fg-primary
+const FG_SECONDARY = '#a0a3b5'; // --fg-secondary
+const FG_MUTED = '#5c5f73';     // --fg-muted
+const WARNING = '#f0b429';      // --warning
+const ERROR = '#ff4d6a';        // --error
+const INFO = '#5b9aff';         // --info
 
 export const noEffects = (): boolean =>
   process.env.NO_COLOR !== undefined ||
@@ -19,12 +23,13 @@ export const noEffects = (): boolean =>
 export const isJson = (): boolean => process.argv.includes('--json');
 
 // Color helpers
-export const g = chalk.hex(MATRIX_GREEN);
-export const w = chalk.hex(AMBER);
-export const r = chalk.hex(RED);
+export const g = chalk.hex(ACCENT);
+export const w = chalk.hex(WARNING);
+export const r = chalk.hex(ERROR);
 export const d = chalk.dim;
-export const white = chalk.hex(WHITE);
-export const dimGreen = chalk.hex(DIM_GREEN);
+export const white = chalk.hex(FG_PRIMARY);
+export const dimGreen = chalk.hex(FG_SECONDARY);
+export const info = chalk.hex(INFO);
 
 // Typing effect — char-by-char with delay
 export async function typeText(text: string, delay = 20): Promise<void> {
@@ -75,7 +80,7 @@ export function spinner(text: string): Ora {
   }
   return ora({
     text: white(text),
-    color: 'green',
+    color: 'cyan',
     spinner: { interval: 80, frames: ['▰▱▱▱▱', '▰▰▱▱▱', '▰▰▰▱▱', '▰▰▰▰▱', '▰▰▰▰▰', '▱▰▰▰▰', '▱▱▰▰▰', '▱▱▱▰▰', '▱▱▱▱▰'] },
   }).start();
 }
@@ -105,7 +110,7 @@ export function table(headers: string[], rows: string[][]): void {
 // Banner — gradient worktrace header
 export function banner(): void {
   if (noEffects()) { console.log('worktrace'); return; }
-  const worktrace = gradient(['#00FF41', '#00CED1'])('w o r k t r a c e');
+  const worktrace = gradient([ACCENT, INFO])('w o r k t r a c e');
   console.log(`\n  ${worktrace}`);
   console.log(d('  ' + String.fromCharCode(0x2500).repeat(17)));
 }

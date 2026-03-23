@@ -1,850 +1,398 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { FileEventType } from "./types";
-import { SUMMARY_FOLDER, isExcludedFile } from "./constants";
-import { SessionManager } from "./session-manager";
-import { getGitDiff, getCurrentBranch, parseGitDiffByFile } from "./git";
-import { analyzeSession, summarizeCodeChanges } from "./analysis";
-import { renderSessionMemory } from "./renderer";
-import { runSafetyCheck, showSafetyNotifications } from "./safety-monitor";
-import { SessionStore } from "./session-store";
-import { getSessionMemory } from "./memory";
-import { generateProjectContext } from "./continuity";
 import {
-  validateBackendConnection,
-  getStoredIdToken,
-  callBackendSummarize,
-  callBackendContext,
-  callBackendJson,
-  callBackendRaw,
-} from "./auth";
+  ensureAgent,
+  agentGet,
+  agentPost,
+  agentPatch,
+  agentPostFireAndForget,
+} from "./agent-client";
 import {
-  getWorkspaceKeyForUri,
-  getWorkspacePathForUri,
-  getRelativePathForUri,
-  getPrimaryWorkspaceKey,
-  getPrimaryWorkspacePath,
-  getWorkspaceContextForCommand,
-} from "./workspace";
+  SessionStartResponse,
+  SessionEndResponse,
+  SessionStatus,
+  AuthStatus,
+  AuthLoginResponse,
+  AuthCallbackResponse,
+  HistoryResponse,
+  ContextResponse,
+  SafetyCheckResponse,
+  CardResponse,
+} from "./types";
+import { getPrimaryWorkspacePath, getWorkspaceContextForCommand } from "./workspace";
 
-const CONFIG_NAMESPACE = "worktrace";
-
-let extensionContext: vscode.ExtensionContext;
 let statusBarItem: vscode.StatusBarItem;
-const sessionManager = new SessionManager();
 
-function generateSummaryFilename(): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const min = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-  return `session-${yyyy}-${mm}-${dd}_${hh}-${min}-${ss}.md`;
-}
-
-// ============================================================================
-// EXTENSION LIFECYCLE
-// ============================================================================
-
-export function activate(context: vscode.ExtensionContext) {
-  extensionContext = context;
-
-  startWorkspaceSession();
-
-  const endSessionCommand = vscode.commands.registerCommand(
-    "worktrace.endSession",
-    async () => {
-      await endSessionAndGenerateSummary();
-    }
-  );
-
-  const addNoteCommand = vscode.commands.registerCommand(
-    "worktrace.addSessionNote",
-    async () => {
-      const note = await vscode.window.showInputBox({
-        prompt: "Add a session note (shown in summary under My Note)",
-        placeHolder:
-          "e.g. Blocked on API design; will pick up tomorrow.",
-      });
-      if (note && note.trim()) {
-        const notes =
-          extensionContext.workspaceState.get<string[]>("sessionNotes", []);
-        notes.push(note.trim());
-        await extensionContext.workspaceState.update("sessionNotes", notes);
-        vscode.window.showInformationMessage("Session note added.");
-      }
-    }
-  );
-
-  const signInCommand = vscode.commands.registerCommand(
-    "worktrace.signIn",
-    async () => {
-      const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-      const backendUrl =
-        config.get<string>("backendUrl") || "http://localhost:3000";
-      const scheme = vscode.env.uriScheme;
-      const authUrl = `${backendUrl}/api/auth/google?scheme=${encodeURIComponent(scheme)}`;
-
-      const platform = process.platform;
-      const { execFile } = require("child_process");
-
-      if (platform === "darwin") {
-        execFile("open", [authUrl]);
-      } else if (platform === "win32") {
-        execFile("cmd", ["/c", "start", "", authUrl]);
-      } else {
-        execFile("xdg-open", [authUrl]);
-      }
-    }
-  );
-
-  const signOutCommand = vscode.commands.registerCommand(
-    "worktrace.signOut",
-    async () => {
-      await extensionContext.secrets.delete("refreshToken");
-      await extensionContext.secrets.delete("idToken");
-      await extensionContext.globalState.update("userId", undefined);
-      await extensionContext.globalState.update("userEmail", undefined);
-      vscode.window.showInformationMessage("Signed out of Worktrace.");
-      updateStatusBar();
-    }
-  );
-
-  const setDisplayNameCommand = vscode.commands.registerCommand(
-    "worktrace.setDisplayName",
-    async () => {
-      const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-      const current = config.get<string>("displayName") || "";
-      const name = await vscode.window.showInputBox({
-        prompt: "Enter the name to display on your shareable session cards",
-        placeHolder: "e.g. @username or your name",
-        value: current,
-      });
-      if (name === undefined) return;
-      const trimmed = name.trim();
-      await config.update(
-        "displayName",
-        trimmed,
-        vscode.ConfigurationTarget.Global
-      );
-
-      const idToken = await getStoredIdToken(extensionContext);
-      if (idToken) {
-        try {
-          await callBackendJson(
-            "PATCH",
-            "/api/user/profile",
-            { displayName: trimmed },
-            idToken
-          );
-        } catch {
-          // Sync failed, local setting still saved
-        }
-      }
-      vscode.window.showInformationMessage(
-        trimmed
-          ? `Display name set to "${trimmed}".`
-          : "Display name cleared."
-      );
-    }
-  );
-
-  const generateCardCommand = vscode.commands.registerCommand(
-    "worktrace.generateCard",
-    async () => {
-      const idToken = await getStoredIdToken(extensionContext);
-      if (!idToken) {
-        const action = await vscode.window.showWarningMessage(
-          "Sign in to generate shareable session cards.",
-          "Sign In"
-        );
-        if (action === "Sign In") {
-          vscode.commands.executeCommand("worktrace.signIn");
-        }
-        return;
-      }
-
-      const today = new Date().toISOString().split("T")[0];
-      const dateInput = await vscode.window.showInputBox({
-        prompt: "Enter date for the card (YYYY-MM-DD)",
-        placeHolder: today,
-        value: today,
-        validateInput: (value) => {
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-            return "Please use YYYY-MM-DD format";
-          }
-          return null;
-        },
-      });
-      if (!dateInput) return;
-
-      const cardData = await callBackendRaw(
-        "GET",
-        `/api/card?date=${dateInput}`,
-        idToken
-      );
-
-      if (!cardData) {
-        vscode.window.showErrorMessage(
-          "Failed to generate card. Make sure you have sessions for that date."
-        );
-        return;
-      }
-
-      const ctx = getWorkspaceContextForCommand();
-      if (!ctx) {
-        vscode.window.showWarningMessage("No workspace open.");
-        return;
-      }
-
-      const sessionsFolderPath = path.join(ctx.summaryDirectory, SUMMARY_FOLDER);
-      const sessionsFolderUri = vscode.Uri.file(sessionsFolderPath);
-      try {
-        await vscode.workspace.fs.createDirectory(sessionsFolderUri);
-      } catch {
-        // Folder may exist
-      }
-
-      const cardFilename = `card-${dateInput}.png`;
-      const cardPath = path.join(sessionsFolderPath, cardFilename);
-
-      await vscode.workspace.fs.writeFile(
-        vscode.Uri.file(cardPath),
-        cardData
-      );
-
-      const action = await vscode.window.showInformationMessage(
-        `Card saved to ${SUMMARY_FOLDER}/${cardFilename}`,
-        "Open Card"
-      );
-      if (action === "Open Card") {
-        await vscode.env.openExternal(vscode.Uri.file(cardPath));
-      }
-    }
-  );
-
-  const runSafetyCheckCommand = vscode.commands.registerCommand(
-    "worktrace.runSafetyCheck",
-    async () => {
-      const diff = await getGitDiff();
-      if (!diff) {
-        vscode.window.showInformationMessage("Worktrace Safety: No uncommitted changes to scan.");
-        return;
-      }
-      const diffSummaries = parseGitDiffByFile(diff);
-      const warnings = runSafetyCheck(diffSummaries);
-      if (warnings.length === 0) {
-        vscode.window.showInformationMessage("Worktrace Safety: No issues found. Code looks clean.");
-      } else {
-        showSafetyNotifications(warnings);
-      }
-    }
-  );
-
-  const showContextCommand = vscode.commands.registerCommand(
-    "worktrace.showContext",
-    async () => {
-      const ctx = getWorkspaceContextForCommand();
-      if (!ctx) {
-        vscode.window.showWarningMessage("No workspace open.");
-        return;
-      }
-
-      const contextPath = path.join(
-        ctx.summaryDirectory,
-        SUMMARY_FOLDER,
-        "context.md"
-      );
-
-      try {
-        const contextBytes = await vscode.workspace.fs.readFile(
-          vscode.Uri.file(contextPath)
-        );
-        const content = Buffer.from(contextBytes).toString("utf8");
-
-        const doc = await vscode.workspace.openTextDocument({
-          content,
-          language: "markdown",
-        });
-        await vscode.window.showTextDocument(doc, { preview: true });
-
-        await vscode.env.clipboard.writeText(content);
-        vscode.window.showInformationMessage(
-          "Project context copied to clipboard. Paste into any AI tool."
-        );
-      } catch {
-        vscode.window.showInformationMessage(
-          "No project context yet. End a session first to generate context."
-        );
-      }
-    }
-  );
-
-  const searchHistoryCommand = vscode.commands.registerCommand(
-    "worktrace.searchHistory",
-    async () => {
-      const ctx = getWorkspaceContextForCommand();
-      if (!ctx) {
-        vscode.window.showWarningMessage("No workspace open.");
-        return;
-      }
-
-      const store = new SessionStore(ctx.summaryDirectory);
-      const sessions = await store.loadSessions();
-
-      if (sessions.length === 0) {
-        vscode.window.showInformationMessage("No session history yet.");
-        return;
-      }
-
-      const query = await vscode.window.showInputBox({
-        prompt: "Search sessions by file name, branch, or keyword",
-        placeHolder: "e.g. auth.ts, main, refactor",
-      });
-
-      if (!query || !query.trim()) return;
-
-      const lower = query.trim().toLowerCase();
-      const matches = sessions.filter((s) => {
-        if (s.branch && s.branch.toLowerCase().includes(lower)) return true;
-        if (s.filesTouched.some((f) => f.toLowerCase().includes(lower))) return true;
-        if (s.intentDescription.toLowerCase().includes(lower)) return true;
-        if (s.sessionMode.toLowerCase().includes(lower)) return true;
-        return false;
-      });
-
-      if (matches.length === 0) {
-        vscode.window.showInformationMessage(`No sessions found matching "${query}".`);
-        return;
-      }
-
-      const items = matches.slice(-20).reverse().map((s) => {
-        const date = new Date(s.startTime).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        return {
-          label: `${date} — ${s.sessionMode}`,
-          description: s.branch ? `on ${s.branch}` : "",
-          detail: s.intentDescription,
-          session: s,
-        };
-      });
-
-      const picked = await vscode.window.showQuickPick(items, {
-        placeHolder: `${matches.length} session(s) found`,
-      });
-
-      if (picked) {
-        const s = picked.session;
-        const lines = [
-          `# Session: ${s.sessionMode}`,
-          "",
-          `- **Date:** ${new Date(s.startTime).toLocaleString()}`,
-          `- **Branch:** \`${s.branch || "unknown"}\``,
-          `- **Confidence:** ${s.confidence}`,
-          `- **Intent:** ${s.intentDescription}`,
-          `- **Files:** ${s.filesTouched.length}`,
-          "",
-          "## Files Touched",
-          "",
-          ...s.filesTouched.map((f) => `- \`${f}\``),
-          "",
-          "## Friction Points",
-          "",
-          ...s.frictionPoints.map((p) => `- ${p}`),
-          "",
-          "## Tomorrow Checklist",
-          "",
-          ...s.tomorrowChecklist.map((t, i) => `${i + 1}. ${t}`),
-        ];
-
-        const doc = await vscode.workspace.openTextDocument({
-          content: lines.join("\n"),
-          language: "markdown",
-        });
-        await vscode.window.showTextDocument(doc, { preview: true });
-      }
-    }
-  );
-
-  const uriHandler = vscode.window.registerUriHandler({
-    async handleUri(uri: vscode.Uri) {
-      if (uri.path === "/auth-callback") {
-        const params = new URLSearchParams(uri.query);
-        const idToken = params.get("idToken");
-        const refreshToken = params.get("refreshToken");
-        const email = params.get("email");
-        const userId = params.get("userId");
-
-        if (refreshToken) {
-          await extensionContext.secrets.store("refreshToken", refreshToken);
-        }
-        if (idToken) {
-          await extensionContext.secrets.store("idToken", idToken);
-        }
-        if (userId) {
-          await extensionContext.globalState.update("userId", userId);
-        }
-        if (email) {
-          await extensionContext.globalState.update("userEmail", email);
-        }
-
-        if (idToken && email) {
-          try {
-            await callBackendJson(
-              "POST",
-              "/api/user/register",
-              { email },
-              idToken
-            );
-          } catch {
-            // Profile creation is non-critical
-          }
-        }
-
-        vscode.window.showInformationMessage(
-          `Signed in as ${email || "user"}.`
-        );
-        updateStatusBar();
-      }
-    },
-  });
-
-  const createListener = vscode.workspace.onDidCreateFiles(
-    (event: vscode.FileCreateEvent) => {
-      event.files.forEach((file: vscode.Uri) =>
-        recordFileEvent(file, "create")
-      );
-    }
-  );
-
-  const deleteListener = vscode.workspace.onDidDeleteFiles(
-    (event: vscode.FileDeleteEvent) => {
-      event.files.forEach((file: vscode.Uri) =>
-        recordFileEvent(file, "delete")
-      );
-    }
-  );
-
-  const saveListener = vscode.workspace.onDidSaveTextDocument(
-    (doc: vscode.TextDocument) => {
-      recordFileEvent(doc.uri, "save");
-    }
-  );
-
-  const openListener = vscode.workspace.onDidOpenTextDocument(
-    (doc: vscode.TextDocument) => {
-      if (doc.uri.scheme === "file") {
-        recordFileChange(doc.uri);
-      }
-    }
-  );
-
-  const changeListener = vscode.workspace.onDidChangeTextDocument(
-    (event: vscode.TextDocumentChangeEvent) => {
-      if (
-        event.contentChanges.length > 0 &&
-        event.document.uri.scheme === "file"
-      ) {
-        recordFileChange(event.document.uri);
-      }
-    }
-  );
-
-  const activeEditorListener = vscode.window.onDidChangeActiveTextEditor(
-    (editor) => {
-      if (editor && editor.document.uri.scheme === "file") {
-        recordFileChange(editor.document.uri);
-      }
-    }
-  );
-
-  vscode.workspace.textDocuments.forEach((doc) => {
-    if (doc.uri.scheme === "file") {
-      recordFileChange(doc.uri);
-    }
-  });
+export async function activate(context: vscode.ExtensionContext) {
+  try {
+    await ensureAgent();
+  } catch (err) {
+    vscode.window.showErrorMessage(
+      `Failed to start Worktrace agent: ${(err as Error).message}`
+    );
+    return;
+  }
 
   statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
     100
   );
-  updateStatusBar();
   statusBarItem.show();
+  context.subscriptions.push(statusBarItem);
+  await updateStatusBar();
 
-  validateBackendConnection(extensionContext, statusBarItem);
+  const workspacePath = getPrimaryWorkspacePath();
+  if (workspacePath) {
+    try {
+      const status = await agentGet<SessionStatus>(
+        `/session/status?workspace=${encodeURIComponent(workspacePath)}`
+      );
+      if (!status.active) {
+        await agentPost<SessionStartResponse>("/session/start", { workspacePath });
+      }
+    } catch {}
+
+    showWhereILeftOff(workspacePath);
+  }
 
   context.subscriptions.push(
-    endSessionCommand,
-    addNoteCommand,
-    signInCommand,
-    signOutCommand,
-    setDisplayNameCommand,
-    generateCardCommand,
-    runSafetyCheckCommand,
-    showContextCommand,
-    searchHistoryCommand,
-    uriHandler,
-    createListener,
-    deleteListener,
-    saveListener,
-    openListener,
-    changeListener,
-    activeEditorListener,
-    statusBarItem
+    vscode.commands.registerCommand("worktrace.endSession", () => endSession()),
+    vscode.commands.registerCommand("worktrace.addSessionNote", () => addNote()),
+    vscode.commands.registerCommand("worktrace.signIn", () => signIn()),
+    vscode.commands.registerCommand("worktrace.signOut", () => signOut()),
+    vscode.commands.registerCommand("worktrace.setDisplayName", () => setDisplayName()),
+    vscode.commands.registerCommand("worktrace.generateCard", () => generateCard()),
+    vscode.commands.registerCommand("worktrace.runSafetyCheck", () => runSafetyCheck()),
+    vscode.commands.registerCommand("worktrace.showContext", () => showContext()),
+    vscode.commands.registerCommand("worktrace.searchHistory", () => searchHistory())
+  );
+
+  context.subscriptions.push(
+    vscode.window.registerUriHandler({
+      async handleUri(uri: vscode.Uri) {
+        if (uri.path === "/auth-callback") {
+          const params = new URLSearchParams(uri.query);
+          const idToken = params.get("idToken");
+          const refreshToken = params.get("refreshToken");
+          const email = params.get("email");
+          const userId = params.get("userId");
+
+          if (!idToken || !refreshToken || !email || !userId) {
+            vscode.window.showErrorMessage("Incomplete auth callback.");
+            return;
+          }
+
+          try {
+            await agentPost<AuthCallbackResponse>("/auth/callback", {
+              idToken, refreshToken, email, userId,
+            });
+            vscode.window.showInformationMessage(`Signed in as ${email}.`);
+            await updateStatusBar();
+          } catch (err) {
+            vscode.window.showErrorMessage(`Sign-in failed: ${(err as Error).message}`);
+          }
+        }
+      },
+    })
   );
 }
 
-export function deactivate() {}
-
-// ============================================================================
-// STATUS BAR
-// ============================================================================
-
-function updateStatusBar() {
-  const email = extensionContext.globalState.get<string>("userEmail");
-  if (email) {
-    statusBarItem.text = "$(circle-filled) Worktrace";
-    statusBarItem.tooltip = `Signed in as ${email}. Click to end session.`;
-    statusBarItem.command = "worktrace.endSession";
-  } else {
-    statusBarItem.text = "$(circle-outline) Worktrace";
-    statusBarItem.tooltip = "Not signed in. Click to sign in for AI summaries.";
-    statusBarItem.command = "worktrace.signIn";
+export function deactivate() {
+  const workspacePath = getPrimaryWorkspacePath();
+  if (workspacePath) {
+    agentPostFireAndForget("/session/end", { workspacePath });
   }
 }
 
-// ============================================================================
-// SESSION TRACKING
-// ============================================================================
-
-function startWorkspaceSession() {
-  if (vscode.workspace.workspaceFile) {
-    const workspaceKey = getPrimaryWorkspaceKey();
-    const workspacePath = getPrimaryWorkspacePath();
-    if (workspaceKey && workspacePath) {
-      sessionManager.ensureSession(workspaceKey, workspacePath);
-      showWhereILeftOff(workspacePath);
+async function updateStatusBar(): Promise<void> {
+  try {
+    const auth = await agentGet<AuthStatus>("/auth/status");
+    if (auth.authenticated && auth.email) {
+      statusBarItem.text = "$(circle-filled) Worktrace";
+      statusBarItem.tooltip = `Signed in as ${auth.email}. Click to end session.`;
+      statusBarItem.command = "worktrace.endSession";
+    } else {
+      statusBarItem.text = "$(circle-outline) Worktrace";
+      statusBarItem.tooltip = "Not signed in. Click to sign in for AI summaries.";
+      statusBarItem.command = "worktrace.signIn";
     }
-    return;
-  }
-  const folders = vscode.workspace.workspaceFolders ?? [];
-  folders.forEach((folder) => {
-    sessionManager.ensureSession(folder.uri.fsPath, folder.uri.fsPath);
-  });
-  // Show context from first folder
-  if (folders.length > 0) {
-    showWhereILeftOff(folders[0].uri.fsPath);
+  } catch {
+    statusBarItem.text = "$(circle-outline) Worktrace";
+    statusBarItem.tooltip = "Agent not connected.";
+    statusBarItem.command = "worktrace.signIn";
   }
 }
 
 async function showWhereILeftOff(workspacePath: string): Promise<void> {
   try {
-    const store = new SessionStore(workspacePath);
-    const lastSession = await store.getLastSession();
-    if (!lastSession) return;
-
-    const endDate = new Date(lastSession.endTime);
-    const now = new Date();
-    const hoursAgo = Math.round(
-      (now.getTime() - endDate.getTime()) / (1000 * 60 * 60)
+    const history = await agentGet<HistoryResponse>(
+      `/history?workspace=${encodeURIComponent(workspacePath)}&limit=1`
     );
+    if (!history.sessions || history.sessions.length === 0) return;
 
-    // Only show if last session was within 48 hours
+    const last = history.sessions[0];
+    const endDate = new Date(last.endTime);
+    const hoursAgo = Math.round((Date.now() - endDate.getTime()) / (1000 * 60 * 60));
     if (hoursAgo > 48) return;
 
     const timeLabel =
-      hoursAgo < 1
-        ? "just now"
-        : hoursAgo < 24
-        ? `${hoursAgo}h ago`
-        : `${Math.round(hoursAgo / 24)}d ago`;
+      hoursAgo < 1 ? "just now" : hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.round(hoursAgo / 24)}d ago`;
 
     const action = await vscode.window.showInformationMessage(
-      `Worktrace: Last session (${timeLabel}) — ${lastSession.intentDescription}`,
-      "Show Context",
-      "Dismiss"
+      `Worktrace: Last session (${timeLabel}) — ${last.intentDescription}`,
+      "Show Context", "Dismiss"
     );
-
     if (action === "Show Context") {
       vscode.commands.executeCommand("worktrace.showContext");
     }
-  } catch {
-    // Non-critical
-  }
+  } catch {}
 }
 
-function recordFileChange(uri: vscode.Uri) {
-  if (uri.scheme !== "file") {
-    return;
-  }
-  const workspaceKey = getWorkspaceKeyForUri(uri);
-  const workspacePath = getWorkspacePathForUri(uri);
-  const relativePath = getRelativePathForUri(uri);
-
-  if (!workspaceKey || !workspacePath || !relativePath) {
-    return;
-  }
-  if (isExcludedFile(relativePath)) {
-    return;
-  }
-
-  const session = sessionManager.ensureSession(workspaceKey, workspacePath);
-  ensureFileTracked(session, relativePath);
-}
-
-function recordFileEvent(uri: vscode.Uri, eventType: FileEventType) {
-  if (uri.scheme !== "file") {
-    return;
-  }
-  const workspaceKey = getWorkspaceKeyForUri(uri);
-  const workspacePath = getWorkspacePathForUri(uri);
-  const relativePath = getRelativePathForUri(uri);
-
-  if (!workspaceKey || !workspacePath || !relativePath) {
-    return;
-  }
-  if (isExcludedFile(relativePath)) {
-    return;
-  }
-
-  const session = sessionManager.ensureSession(workspaceKey, workspacePath);
-  session.fileChangeEvents.push({
-    file: relativePath,
-    eventType,
-    timestamp: new Date().toISOString(),
-  });
-  ensureFileTracked(session, relativePath);
-  if (eventType === "save") {
-    session.saveCounts[relativePath] =
-      (session.saveCounts[relativePath] ?? 0) + 1;
-  }
-}
-
-async function endSessionAndGenerateSummary() {
+async function endSession(): Promise<void> {
   const ctx = getWorkspaceContextForCommand();
-  if (!ctx) {
-    vscode.window.showWarningMessage(
-      "No workspace is open. Session summary not generated."
-    );
-    return;
-  }
-
-  const { workspaceKey, summaryDirectory } = ctx;
-  const session = sessionManager.endSession(
-    workspaceKey,
-    new Date().toISOString()
-  );
-  if (!session) {
-    vscode.window.showWarningMessage(
-      "No active session found for this workspace."
-    );
-    return;
-  }
-
-  session.gitDiff = await getGitDiff();
-  session.branch = await getCurrentBranch();
-  mergeDiffFilesIntoSession(session);
-
-  session.filesTouched = session.filesTouched.filter(
-    (f) => !isExcludedFile(f)
-  );
-
-  const analysis = await analyzeSession(session, extensionContext);
-
-  // Run safety check
-  const diffSummaries = parseGitDiffByFile(session.gitDiff);
-  const safetyWarnings = runSafetyCheck(diffSummaries);
-  if (safetyWarnings.length > 0) {
-    showSafetyNotifications(safetyWarnings);
-  }
-
-  // Persist session to .worktrace/ store
-  const store = new SessionStore(summaryDirectory);
-  try {
-    await store.saveSession(session, analysis, safetyWarnings);
-  } catch {
-    // Non-critical — session still gets a summary
-  }
-
-  // Load cross-session memory
-  const memory = await getSessionMemory(store);
-  const projectName = path.basename(summaryDirectory);
-  const codeChanges = summarizeCodeChanges(analysis.delta);
-
-  const sessionsFolderPath = path.join(summaryDirectory, SUMMARY_FOLDER);
-  const sessionsFolderUri = vscode.Uri.file(sessionsFolderPath);
+  if (!ctx) { vscode.window.showWarningMessage("No workspace is open."); return; }
 
   try {
-    await vscode.workspace.fs.createDirectory(sessionsFolderUri);
-  } catch {
-    // Folder may already exist
-  }
+    const data = await agentPost<SessionEndResponse>("/session/end", {
+      workspacePath: ctx.summaryDirectory,
+    });
 
-  // Read previous context if it exists
-  const contextPath = path.join(sessionsFolderPath, "context.md");
-  let previousContext: string | null = null;
-  try {
-    const contextBytes = await vscode.workspace.fs.readFile(
-      vscode.Uri.file(contextPath)
-    );
-    previousContext = Buffer.from(contextBytes).toString("utf8");
-  } catch {
-    // No previous context — first session
-  }
-
-  // Generate local summary (no context block embedded — context is separate)
-  let summary = renderSessionMemory({
-    session,
-    analysis,
-    safetyWarnings,
-    codeChanges,
-    memory,
-  });
-
-  // Generate local context (deterministic fallback)
-  let context = generateProjectContext(
-    memory,
-    session,
-    analysis,
-    projectName,
-    previousContext
-  );
-
-  await extensionContext.workspaceState.update("sessionNotes", []);
-
-  let usedAiSummary = false;
-  const idToken = await getStoredIdToken(extensionContext);
-  if (idToken) {
+    const summaryAbsPath = path.join(ctx.summaryDirectory, data.summaryPath);
     try {
-      // Fire both summary and context generation in parallel
-      const [aiSummary, aiContext] = await Promise.all([
-        callBackendSummarize(session, analysis, idToken),
-        callBackendContext(session, analysis, previousContext, idToken),
-      ]);
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(summaryAbsPath));
+      await vscode.window.showTextDocument(doc, { preview: false });
+    } catch {}
 
-      if (aiSummary) {
-        summary = aiSummary;
-        usedAiSummary = true;
+    vscode.window.showInformationMessage(`Session summary written to ${data.summaryPath}`);
+
+    if (data.safetyWarnings.length > 0) {
+      const criticals = data.safetyWarnings.filter((w) => w.severity === "critical");
+      const warnings = data.safetyWarnings.filter((w) => w.severity === "warning");
+      const infos = data.safetyWarnings.filter((w) => w.severity === "info");
+
+      if (criticals.length > 0) {
+        vscode.window.showErrorMessage(`Worktrace Safety: ${criticals.length} critical issue(s) found.`);
       }
-      if (aiContext) {
-        context = aiContext;
+      if (warnings.length > 0) {
+        vscode.window.showWarningMessage(`Worktrace Safety: ${warnings.length} warning(s).`);
       }
-    } catch {
-      // Backend unavailable, use local summary + context
+      if (infos.length === 0) {
+      } else if (criticals.length === 0 && warnings.length === 0) {
+        vscode.window.showInformationMessage(`Worktrace Safety: ${infos.length} info note(s).`);
+      }
     }
-  } else {
-    const action = await vscode.window.showInformationMessage(
-      "Using local summary. Sign in for AI-powered summaries and shareable session cards.",
-      "Sign In"
-    );
-    if (action === "Sign In") {
-      vscode.commands.executeCommand("worktrace.signIn");
+
+    if (!data.aiSummary) {
+      const action = await vscode.window.showInformationMessage(
+        "Using local summary. Sign in for AI-powered summaries.", "Sign In"
+      );
+      if (action === "Sign In") vscode.commands.executeCommand("worktrace.signIn");
     }
+
+    try {
+      await agentPost<SessionStartResponse>("/session/start", { workspacePath: ctx.summaryDirectory });
+    } catch {}
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to end session: ${(err as Error).message}`);
   }
+}
 
-  const summaryFilename = generateSummaryFilename();
-  const summaryPath = path.join(sessionsFolderPath, summaryFilename);
+async function addNote(): Promise<void> {
+  const ctx = getWorkspaceContextForCommand();
+  if (!ctx) { vscode.window.showWarningMessage("No workspace open."); return; }
+
+  const note = await vscode.window.showInputBox({
+    prompt: "Add a session note (shown in summary under My Note)",
+    placeHolder: "e.g. Blocked on API design; will pick up tomorrow.",
+  });
+  if (!note || !note.trim()) return;
 
   try {
-    // Write session summary and context file in parallel
-    await Promise.all([
-      vscode.workspace.fs.writeFile(
-        vscode.Uri.file(summaryPath),
-        Buffer.from(summary, "utf8")
-      ),
-      vscode.workspace.fs.writeFile(
-        vscode.Uri.file(contextPath),
-        Buffer.from(context, "utf8")
-      ),
-    ]);
-
-    vscode.window.showInformationMessage(
-      `Session summary written to ${SUMMARY_FOLDER}/${summaryFilename}`
-    );
-
-    const doc = await vscode.workspace.openTextDocument(
-      vscode.Uri.file(summaryPath)
-    );
-    await vscode.window.showTextDocument(doc, { preview: false });
-
-    if (usedAiSummary && idToken) {
-      try {
-        await fetchAndSaveCard(sessionsFolderPath, idToken);
-      } catch {
-        // Card generation is non-critical
-      }
-    }
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unknown error writing summary.";
-    vscode.window.showErrorMessage(
-      `Failed to write session summary: ${message}`
-    );
-  } finally {
-    sessionManager.removeSession(workspaceKey);
-    startWorkspaceSession();
+    await agentPost("/session/note", { workspacePath: ctx.summaryDirectory, note: note.trim() });
+    vscode.window.showInformationMessage("Session note added.");
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to add note: ${(err as Error).message}`);
   }
 }
 
-async function fetchAndSaveCard(
-  sessionsFolderPath: string,
-  idToken: string
-): Promise<void> {
-  const today = new Date().toISOString().split("T")[0];
-  const lastCardDate =
-    extensionContext.globalState.get<string>("lastCardDate");
-  if (lastCardDate === today) return;
-
-  const cardData = await callBackendRaw(
-    "GET",
-    `/api/card?date=${today}`,
-    idToken
-  );
-  if (!cardData) return;
-
-  const cardFilename = `card-${today}.png`;
-  const cardPath = path.join(sessionsFolderPath, cardFilename);
-
-  await vscode.workspace.fs.writeFile(
-    vscode.Uri.file(cardPath),
-    cardData
-  );
-  await extensionContext.globalState.update("lastCardDate", today);
-
-  const action = await vscode.window.showInformationMessage(
-    `Your daily session card is ready! Saved to ${SUMMARY_FOLDER}/${cardFilename}`,
-    "Open Card"
-  );
-  if (action === "Open Card") {
-    await vscode.env.openExternal(vscode.Uri.file(cardPath));
+async function signIn(): Promise<void> {
+  try {
+    const scheme = vscode.env.uriScheme;
+    const data = await agentPost<AuthLoginResponse>("/auth/login", { scheme });
+    await vscode.env.openExternal(vscode.Uri.parse(data.authUrl));
+  } catch (err) {
+    vscode.window.showErrorMessage(`Sign-in failed: ${(err as Error).message}`);
   }
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-function ensureFileTracked(session: { filesTouched: string[] }, relativePath: string) {
-  if (!session.filesTouched.includes(relativePath)) {
-    session.filesTouched.push(relativePath);
+async function signOut(): Promise<void> {
+  try {
+    await agentPost("/auth/logout");
+    vscode.window.showInformationMessage("Signed out of Worktrace.");
+    await updateStatusBar();
+  } catch (err) {
+    vscode.window.showErrorMessage(`Sign-out failed: ${(err as Error).message}`);
   }
 }
 
-function mergeDiffFilesIntoSession(session: { gitDiff: string | null; filesTouched: string[] }) {
-  const diffSummaries = parseGitDiffByFile(session.gitDiff);
-  diffSummaries.forEach((summary) => {
-    if (!isExcludedFile(summary.file)) {
-      if (!session.filesTouched.includes(summary.file)) {
-        session.filesTouched.push(summary.file);
-      }
-    }
+async function setDisplayName(): Promise<void> {
+  const name = await vscode.window.showInputBox({
+    prompt: "Enter the name to display on your shareable session cards",
+    placeHolder: "e.g. @username or your name",
   });
+  if (name === undefined) return;
+  const trimmed = name.trim();
+
+  try {
+    await agentPatch("/profile", { displayName: trimmed });
+    vscode.window.showInformationMessage(
+      trimmed ? `Display name set to "${trimmed}".` : "Display name cleared."
+    );
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to update display name: ${(err as Error).message}`);
+  }
+}
+
+async function generateCard(): Promise<void> {
+  const ctx = getWorkspaceContextForCommand();
+  if (!ctx) { vscode.window.showWarningMessage("No workspace open."); return; }
+
+  try {
+    const auth = await agentGet<AuthStatus>("/auth/status");
+    if (!auth.authenticated) {
+      const action = await vscode.window.showWarningMessage(
+        "Sign in to generate shareable session cards.", "Sign In"
+      );
+      if (action === "Sign In") vscode.commands.executeCommand("worktrace.signIn");
+      return;
+    }
+  } catch { vscode.window.showErrorMessage("Cannot reach agent."); return; }
+
+  const today = new Date().toISOString().split("T")[0];
+  const dateInput = await vscode.window.showInputBox({
+    prompt: "Enter date for the card (YYYY-MM-DD)",
+    placeHolder: today, value: today,
+    validateInput: (v) => !/^\d{4}-\d{2}-\d{2}$/.test(v) ? "Please use YYYY-MM-DD format" : null,
+  });
+  if (!dateInput) return;
+
+  try {
+    const data = await agentPost<CardResponse>("/card/generate", {
+      workspacePath: ctx.summaryDirectory, date: dateInput,
+    });
+    const action = await vscode.window.showInformationMessage(`Card saved to ${data.cardPath}`, "Open Card");
+    if (action === "Open Card") {
+      const absPath = path.isAbsolute(data.cardPath)
+        ? data.cardPath : path.join(ctx.summaryDirectory, data.cardPath);
+      await vscode.env.openExternal(vscode.Uri.file(absPath));
+    }
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to generate card: ${(err as Error).message}`);
+  }
+}
+
+async function runSafetyCheck(): Promise<void> {
+  const ctx = getWorkspaceContextForCommand();
+  if (!ctx) { vscode.window.showWarningMessage("No workspace open."); return; }
+
+  try {
+    const data = await agentPost<SafetyCheckResponse>("/safety/check", {
+      workspacePath: ctx.summaryDirectory,
+    });
+    if (data.warnings.length === 0) {
+      vscode.window.showInformationMessage("Worktrace Safety: No issues found. Code looks clean.");
+    } else {
+      const criticals = data.warnings.filter((w) => w.severity === "critical");
+      const warns = data.warnings.filter((w) => w.severity === "warning");
+      if (criticals.length > 0) {
+        vscode.window.showErrorMessage(
+          `Worktrace Safety: ${criticals.length} critical, ${warns.length} warnings found.`
+        );
+      } else {
+        vscode.window.showWarningMessage(`Worktrace Safety: ${data.warnings.length} issue(s) found.`);
+      }
+    }
+  } catch (err) {
+    vscode.window.showErrorMessage(`Safety check failed: ${(err as Error).message}`);
+  }
+}
+
+async function showContext(): Promise<void> {
+  const ctx = getWorkspaceContextForCommand();
+  if (!ctx) { vscode.window.showWarningMessage("No workspace open."); return; }
+
+  try {
+    const data = await agentGet<ContextResponse>(
+      `/context?workspace=${encodeURIComponent(ctx.summaryDirectory)}`
+    );
+    if (!data.context) {
+      vscode.window.showInformationMessage("No project context yet. End a session first.");
+      return;
+    }
+    const doc = await vscode.workspace.openTextDocument({ content: data.context, language: "markdown" });
+    await vscode.window.showTextDocument(doc, { preview: true });
+    await vscode.env.clipboard.writeText(data.context);
+    vscode.window.showInformationMessage("Project context copied to clipboard.");
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to load context: ${(err as Error).message}`);
+  }
+}
+
+async function searchHistory(): Promise<void> {
+  const ctx = getWorkspaceContextForCommand();
+  if (!ctx) { vscode.window.showWarningMessage("No workspace open."); return; }
+
+  const query = await vscode.window.showInputBox({
+    prompt: "Search sessions by file name, branch, or keyword",
+    placeHolder: "e.g. auth.ts, main, refactor",
+  });
+  if (!query || !query.trim()) return;
+
+  try {
+    const data = await agentGet<HistoryResponse>(
+      `/history?workspace=${encodeURIComponent(ctx.summaryDirectory)}&query=${encodeURIComponent(query.trim())}&limit=20`
+    );
+    if (!data.sessions || data.sessions.length === 0) {
+      vscode.window.showInformationMessage(`No sessions found matching "${query}".`);
+      return;
+    }
+
+    const items = data.sessions.map((s) => {
+      const date = new Date(s.startTime).toLocaleDateString("en-US", {
+        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+      });
+      return {
+        label: `${date} — ${s.sessionMode}`,
+        description: s.branch ? `on ${s.branch}` : "",
+        detail: s.intentDescription,
+        session: s,
+      };
+    });
+
+    const picked = await vscode.window.showQuickPick(items, {
+      placeHolder: `${data.sessions.length} session(s) found`,
+    });
+
+    if (picked) {
+      const s = picked.session;
+      const lines = [
+        `# Session: ${s.sessionMode}`, "",
+        `- **Date:** ${new Date(s.startTime).toLocaleString()}`,
+        `- **Branch:** \`${s.branch || "unknown"}\``,
+        `- **Confidence:** ${s.confidence}`,
+        `- **Intent:** ${s.intentDescription}`,
+        `- **Files:** ${s.filesTouched.length}`, "",
+        "## Files Touched", "",
+        ...s.filesTouched.map((f) => `- \`${f}\``), "",
+        "## Friction Points", "",
+        ...s.frictionPoints.map((p) => `- ${p}`), "",
+        "## Tomorrow Checklist", "",
+        ...s.tomorrowChecklist.map((t, i) => `${i + 1}. ${t}`),
+      ];
+      const doc = await vscode.workspace.openTextDocument({ content: lines.join("\n"), language: "markdown" });
+      await vscode.window.showTextDocument(doc, { preview: true });
+    }
+  } catch (err) {
+    vscode.window.showErrorMessage(`History search failed: ${(err as Error).message}`);
+  }
 }

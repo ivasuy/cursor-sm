@@ -1,13 +1,27 @@
 # Worktrace
 
-This repository is now split into two top-level apps:
+"The operating system for AI-assisted development." Session tracking, safety monitoring, and proof of work for AI-assisted coding.
+
+## Architecture
 
 | Path | Role |
 | --- | --- |
-| `Extension/` | VS Code / Cursor extension for local session tracking, summaries, continuity, and safety checks |
+| `CLI/packages/agent/` | Local daemon (port 9315) — single source of truth for session lifecycle, analysis, safety, memory, context, and credentials |
+| `CLI/packages/cli/` | Terminal client — Matrix-themed UX, thin HTTP client to agent |
+| `Extension/` | VS Code / Cursor extension — thin UI client, delegates all logic to the agent via HTTP |
 | `Backend/` | Optional backend for Google sign-in, AI summaries/context, usage tracking, and shareable cards |
 
 ## Quick Start
+
+### Agent + CLI
+
+```bash
+cd CLI
+npm install
+npm run build --workspaces
+sudo npm link                          # optional: makes `worktrace` available globally
+worktrace start                        # starts agent daemon + begins session
+```
 
 ### Extension
 
@@ -18,9 +32,9 @@ npm run compile
 npm run package
 ```
 
-Open `Extension/` in VS Code / Cursor and press `F5` to launch the Extension Development Host.
+Open `Extension/` in VS Code / Cursor and press `F5` to launch the Extension Development Host. The extension auto-starts the agent daemon.
 
-### Backend
+### Backend (optional)
 
 ```bash
 cd Backend

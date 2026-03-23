@@ -132,22 +132,22 @@ export function SignalsSection() {
   }, [])
 
   return (
-    <section id="watchlist" ref={sectionRef} className="relative py-32 pl-6 md:pl-28">
+    <section id="watchlist" ref={sectionRef} className="relative py-20 md:py-32 pl-6 md:pl-28">
       <div
         ref={cursorRef}
         className={cn(
           "pointer-events-none absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 z-50",
-          "h-20 w-20 rounded-full border border-accent/25 bg-white/[0.04] shadow-[0_0_50px_rgba(255,255,255,0.1)] backdrop-blur-xl",
+          "h-20 w-20 rounded-full border border-accent/25 bg-accent/[0.04] shadow-[0_0_50px_rgba(0,229,160,0.1)] backdrop-blur-xl",
           "transition-opacity duration-300",
           isHovering ? "opacity-100" : "opacity-0",
         )}
       />
 
       {/* Section header */}
-      <div ref={headerRef} className="mb-16 flex flex-col gap-6 pr-6 md:pr-12 lg:flex-row lg:items-end lg:justify-between">
+      <div ref={headerRef} className="mb-10 md:mb-16 flex flex-col gap-4 md:gap-6 pr-6 md:pr-12 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-accent">01 / Watchlist</span>
-          <h2 className="mt-4 font-[var(--font-bebas)] text-5xl md:text-7xl tracking-tight">WHAT TO WATCH</h2>
+          <h2 className="mt-3 md:mt-4 font-[var(--font-bebas)] text-4xl md:text-7xl tracking-tight">WHAT TO WATCH</h2>
         </div>
         <p className="max-w-md text-sm leading-7 text-muted-foreground">
           A premium signal rail for what ships now, what hardens the product, and where the CLI joins the system.
@@ -160,7 +160,7 @@ export function SignalsSection() {
           scrollRef.current = el
           cardsRef.current = el
         }}
-        className="flex gap-8 overflow-x-auto pb-8 pr-12 scrollbar-hide"
+        className="grid auto-cols-[16rem] md:auto-cols-[20rem] grid-flow-col gap-4 md:gap-8 overflow-x-auto pb-8 pr-6 md:pr-12 scrollbar-hide"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {watchlist.map((item, index) => (
@@ -181,30 +181,30 @@ function SignalCard({
   return (
     <article
       className={cn(
-        "group relative flex-shrink-0 w-80",
+        "group relative",
         "transition-transform duration-500 ease-out",
         "hover:-translate-y-2",
       )}
     >
-      <div className="relative border border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-8 shadow-[0_24px_60px_rgba(0,0,0,0.24)] backdrop-blur-xl">
-        <div className="absolute -top-px left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+      <div className="relative flex flex-col h-full border border-border/60 bg-[linear-gradient(180deg,rgba(0,229,160,0.04),rgba(0,229,160,0.01))] p-5 md:p-8 shadow-[0_24px_60px_rgba(0,0,0,0.24)] backdrop-blur-xl hover:border-accent/30 transition-colors duration-300">
+        <div className="absolute -top-px left-0 right-0 h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent" />
 
         <div className="flex items-baseline justify-between mb-8">
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">{signal.code}</span>
-          <span className="border border-white/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          <span className="border border-accent/20 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
             {signal.status}
           </span>
         </div>
 
-        <h3 className="font-[var(--font-bebas)] text-4xl tracking-tight mb-4 group-hover:text-accent transition-colors duration-300">
+        <h3 className="font-[var(--font-bebas)] text-2xl md:text-4xl tracking-tight mb-4 group-hover:text-accent transition-colors duration-300">
           {signal.title}
         </h3>
 
         <div className="w-12 h-px bg-accent/60 mb-6 group-hover:w-full transition-all duration-500" />
 
-        <p className="font-mono text-xs text-muted-foreground leading-relaxed">{signal.note}</p>
+        <p className="font-mono text-xs text-muted-foreground leading-relaxed flex-1">{signal.note}</p>
 
-        <div className="mt-8 flex items-center justify-between gap-4 border-t border-white/8 pt-5">
+        <div className="mt-8 flex items-center justify-between gap-4 border-t border-border/60 pt-5">
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             {signal.lane}
           </span>
@@ -214,7 +214,7 @@ function SignalCard({
         </div>
       </div>
 
-      <div className="absolute inset-0 -z-10 translate-x-1 translate-y-1 bg-white/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="absolute inset-0 -z-10 translate-x-1 translate-y-1 bg-accent/[0.04] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
     </article>
   )
 }

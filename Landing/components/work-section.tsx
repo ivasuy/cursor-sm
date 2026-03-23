@@ -13,43 +13,50 @@ const surfaces = [
     medium: "Cursor + VS Code",
     description:
       "Automatic session capture, deterministic summaries, startup continuity, safety checks, and history search live here today.",
-    span: "col-span-2 row-span-2",
+    span: "sm:col-span-2 md:col-span-2 sm:row-span-2 md:row-span-2",
     status: "Shipping now",
   },
   {
     title: "Backend",
     medium: "Optional Cloud Assist",
     description: "Google auth, AI summaries, AI context generation, usage limits, and shareable card support.",
-    span: "col-span-1 row-span-1",
+    span: "",
     status: "Enhancement layer",
   },
   {
     title: "Dashboard",
     medium: "Proof of Work",
     description: "Session cards, timelines, and health views turn coding activity into something you can review and share.",
-    span: "col-span-1 row-span-2",
+    span: "sm:row-span-2 md:row-span-2",
     status: "Expanding",
   },
   {
     title: "CLI",
     medium: "Terminal Surface",
     description: "Parity for start, end, context, status, and check flows when work begins outside the editor.",
-    span: "col-span-1 row-span-1",
+    span: "",
     status: "On deck",
   },
   {
     title: "Continuity Engine",
     medium: "Memory Layer",
     description: "Diffs, notes, branches, and touched files become reusable context instead of disappearing after the session ends.",
-    span: "col-span-2 row-span-1",
+    span: "sm:col-span-2 md:col-span-2",
     status: "Core system",
   },
   {
     title: "Safety Monitor",
     medium: "Guardrail Layer",
     description: "Secrets, risky changes, and drift get surfaced with the same signal quality as summaries and cards.",
-    span: "col-span-1 row-span-1",
+    span: "",
     status: "Running",
+  },
+  {
+    title: "Session Cards",
+    medium: "Shareable Proof",
+    description: "Turn completed sessions into visual cards you can share with your team, manager, or portfolio.",
+    span: "",
+    status: "Live",
   },
 ]
 
@@ -101,12 +108,12 @@ export function WorkSection() {
   }, [])
 
   return (
-    <section ref={sectionRef} id="surfaces" className="relative py-32 pl-6 md:pl-28 pr-6 md:pr-12">
+    <section ref={sectionRef} id="surfaces" className="relative py-20 md:py-32 pl-6 md:pl-28 pr-6 md:pr-12">
       {/* Section header */}
-      <div ref={headerRef} className="mb-16 flex items-end justify-between">
+      <div ref={headerRef} className="mb-10 md:mb-16 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-accent">02 / Surfaces</span>
-          <h2 className="mt-4 font-[var(--font-bebas)] text-5xl md:text-7xl tracking-tight">PRODUCT SURFACES</h2>
+          <h2 className="mt-3 md:mt-4 font-[var(--font-bebas)] text-4xl md:text-7xl tracking-tight">PRODUCT SURFACES</h2>
         </div>
         <p className="hidden md:block max-w-xs font-mono text-xs text-muted-foreground text-right leading-relaxed">
           One system across editor memory, cloud assist, proof of work, and an explicit CLI path.
@@ -116,7 +123,7 @@ export function WorkSection() {
       {/* Asymmetric grid */}
       <div
         ref={gridRef}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[180px] md:auto-rows-[200px]"
+        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[160px] sm:auto-rows-[180px] md:auto-rows-[200px]"
       >
         {surfaces.map((experiment, index) => (
           <WorkCard key={index} experiment={experiment} index={index} persistHover={index === 0} />
@@ -165,7 +172,7 @@ function WorkCard({
     <article
       ref={cardRef}
       className={cn(
-        "group relative flex cursor-pointer flex-col justify-between overflow-hidden border border-border/50 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5 shadow-[0_20px_48px_rgba(0,0,0,0.18)] backdrop-blur-xl transition-all duration-500",
+        "group relative flex cursor-pointer flex-col justify-between overflow-hidden border border-border/50 bg-[linear-gradient(180deg,rgba(0,229,160,0.03),rgba(0,229,160,0.01))] p-5 shadow-[0_20px_48px_rgba(0,0,0,0.18)] backdrop-blur-xl transition-all duration-500",
         experiment.span,
         isActive && "border-accent/60",
       )}
@@ -175,7 +182,7 @@ function WorkCard({
       {/* Background layer */}
       <div
         className={cn(
-          "absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.1),transparent_45%)] transition-opacity duration-500",
+          "absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,229,160,0.08),transparent_45%)] transition-opacity duration-500",
           isActive ? "opacity-100" : "opacity-0",
         )}
       />

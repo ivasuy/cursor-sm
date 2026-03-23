@@ -1,119 +1,84 @@
-export type FileEventType = "create" | "save" | "delete";
-
-export type FileCategory = "Logic" | "UI" | "Config" | "Docs" | "Test" | "Other";
-
-export type WorkIntent =
-  | "focused-deep-work"
-  | "active-iteration"
-  | "ui-behavior-work"
-  | "experimentation"
-  | "exploration"
-  | "debugging-thinking"
-  | "mixed";
-
-export type SessionData = {
+export interface SessionStartResponse {
   sessionId: string;
-  workspacePath: string;
   startTime: string;
-  endTime: string | null;
-  filesTouched: string[];
-  saveCounts: Record<string, number>;
-  fileChangeEvents: {
-    file: string;
-    eventType: FileEventType;
-    timestamp: string;
-  }[];
-  gitDiff: string | null;
   branch: string | null;
-};
+}
 
-export type DiffFileSummary = {
-  file: string;
-  added: number;
-  removed: number;
-  addedLines: string[];
-  removedLines: string[];
-};
+export interface SessionEndResponse {
+  summaryPath: string;
+  contextPath: string;
+  safetyWarnings: SafetyWarning[];
+  aiSummary: boolean;
+}
 
-export type SessionDelta = {
-  created: { file: string; content: string[]; fullContent: string }[];
-  updated: {
-    file: string;
-    added: number;
-    removed: number;
-    addedLines: string[];
-    removedLines: string[];
-    fullContent: string;
-  }[];
-  deleted: {
-    file: string;
-    affectedFiles: { file: string; content: string }[];
-  }[];
-};
-
-export type ConfidenceLevel = "Low" | "Medium" | "High";
-
-export type SessionAnalysis = {
-  sessionMode: string;
-  confidence: { level: ConfidenceLevel; explanation: string };
-  delta: SessionDelta;
-  frictionPoints: string[];
-  tomorrowChecklist: string[];
-  explicitlyDidntTouch: string[];
-  userNote: string | null;
-  primaryFocusFiles: { file: string; reason: string }[];
-  intentDescription: string;
-};
-
-export type SafetyWarning = {
-  severity: "info" | "warning" | "critical";
-  category: string;
+export interface SafetyWarning {
+  severity: string;
   message: string;
   file?: string;
-  line?: string;
-  lineIndex?: number;
-  context?: string[];
-};
+  line?: number;
+}
 
-export type CodeChangeSummary = {
-  file: string;
-  linesAdded: number;
-  linesRemoved: number;
-  functionsAdded: string[];
-  importsChanged: boolean;
-};
+export interface SessionStatus {
+  active: boolean;
+  sessionId?: string;
+  duration?: number;
+  branch?: string;
+  filesTouched?: number;
+  totalSaves?: number;
+  events?: number;
+  notes?: number;
+}
 
-// ============================================================================
-// CROSS-SESSION MEMORY (Phase 2)
-// ============================================================================
+export interface AuthStatus {
+  authenticated: boolean;
+  email?: string;
+  userId?: string;
+  displayName?: string;
+}
 
-export type StoredSession = {
+export interface AuthLoginResponse {
+  authUrl: string;
+}
+
+export interface AuthCallbackResponse {
+  email: string;
+  userId: string;
+}
+
+export interface HistorySession {
   id: string;
   startTime: string;
   endTime: string;
   branch: string | null;
   filesTouched: string[];
-  saveCounts: Record<string, number>;
   sessionMode: string;
-  confidence: ConfidenceLevel;
+  confidence: string;
   frictionPoints: string[];
   tomorrowChecklist: string[];
   intentDescription: string;
-  safetyWarningCount: number;
-};
+  linesAdded?: number;
+  linesRemoved?: number;
+}
 
-export type ChurnHotspot = {
-  file: string;
-  sessionCount: number;
-  totalSaves: number;
-  lastSeen: string;
-};
+export interface HistoryResponse {
+  sessions: HistorySession[];
+}
 
-export type SessionMemory = {
-  lastSession: StoredSession | null;
-  totalSessions: number;
-  churnHotspots: ChurnHotspot[];
-  recurringFriction: string[];
-  recentBranches: string[];
-  openTodos: string[];
-};
+export interface ContextResponse {
+  context: string | null;
+}
+
+export interface SafetyCheckResponse {
+  warnings: SafetyWarning[];
+}
+
+export interface CardResponse {
+  cardPath: string;
+}
+
+export interface HealthResponse {
+  status: string;
+  uptime: number;
+  version: string;
+  activeSessions: number;
+}

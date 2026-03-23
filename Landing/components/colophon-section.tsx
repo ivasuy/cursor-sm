@@ -99,15 +99,15 @@ export function ColophonSection() {
     <section
       ref={sectionRef}
       id="colophon"
-      className="relative py-32 pl-6 md:pl-28 pr-6 md:pr-12 border-t border-border/30"
+      className="relative py-20 md:py-32 pb-28 md:pb-32 pl-6 md:pl-28 pr-6 md:pr-12 border-t border-border/30"
     >
       {/* Section header */}
-      <div ref={headerRef} className="mb-16 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+      <div ref={headerRef} className="mb-10 md:mb-16 flex flex-col gap-6 md:gap-8 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-accent">04 / Notes</span>
-          <h2 className="mt-4 font-[var(--font-bebas)] text-5xl md:text-7xl tracking-tight">SYSTEM NOTES</h2>
+          <h2 className="mt-3 md:mt-4 font-[var(--font-bebas)] text-4xl md:text-7xl tracking-tight">SYSTEM NOTES</h2>
         </div>
-        <div className="flex items-center gap-4 border border-border/60 bg-white/[0.03] px-5 py-4 shadow-[0_18px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+        <div className="flex items-center gap-4 border border-accent/20 bg-accent/[0.04] px-5 py-4 shadow-[0_18px_40px_rgba(0,0,0,0.24)] backdrop-blur-xl">
           <Image
             src="/worktrace-logo.svg"
             alt="Worktrace logo"

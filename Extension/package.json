@@ -62,20 +62,10 @@
     "configuration": {
       "title": "Worktrace",
       "properties": {
-        "worktrace.backendUrl": {
-          "type": "string",
-          "default": "http://localhost:3000",
-          "description": "Backend API URL for AI-powered summaries."
-        },
-        "worktrace.firebaseApiKey": {
+        "worktrace.agentPath": {
           "type": "string",
           "default": "",
-          "description": "Firebase Web API key for token refresh (set once during setup)."
-        },
-        "worktrace.displayName": {
-          "type": "string",
-          "default": "",
-          "description": "Your display name shown on shareable session cards."
+          "description": "Path to worktrace-agent server.js. Leave empty for auto-detection."
         },
         "worktrace.safetyMonitor": {
           "type": "boolean",

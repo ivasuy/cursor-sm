@@ -1,21 +1,19 @@
 # Feature Overview
 
-This file covers what Worktrace currently does in the repo today. It is intentionally narrower than the long-term roadmap in `PRODUCT_ROADMAP.md`.
+This file covers what Worktrace currently does in the repo today. It is intentionally narrower than the long-term roadmap in `PRODUCT.md`.
 
 ## Signals Worktrace Tracks
 
-The extension captures these local signals while you work:
+The agent daemon captures these local signals while you work:
 
 | Signal | Source | Purpose |
 | --- | --- | --- |
-| File creates | `workspace.onDidCreateFiles` | Detect scaffolding and new modules |
-| File saves | `workspace.onDidSaveTextDocument` | Measure iteration intensity per file |
-| File deletes | `workspace.onDidDeleteFiles` | Detect churn and abandoned approaches |
-| File opens | `workspace.onDidOpenTextDocument` | Track files the session explored |
-| Text changes | `workspace.onDidChangeTextDocument` | Mark active files as touched |
+| File creates | chokidar file watcher | Detect scaffolding and new modules |
+| File saves | chokidar file watcher | Measure iteration intensity per file |
+| File deletes | chokidar file watcher | Detect churn and abandoned approaches |
 | Git diff | `git diff HEAD` at session end | Capture actual code changes |
 | Git branch | `git branch --show-current` | Keep session context branch-aware |
-| Manual notes | Command palette input | Capture explicit human intent |
+| Manual notes | Extension command palette or CLI `note` command | Capture explicit human intent |
 
 Excluded content includes generated folders, build output, dependency folders, lock files, `sessions/`, and `.worktrace/`.
 
@@ -35,7 +33,7 @@ Every session can be summarized locally without network access. Current summary 
 
 ### Cross-session memory
 
-Worktrace stores compact session history in `.worktrace/sessions.json` and uses it for:
+The agent stores compact session history in `.worktrace/sessions.json` and uses it for:
 
 - churn hotspot detection
 - recurring friction detection
@@ -45,15 +43,16 @@ Worktrace stores compact session history in `.worktrace/sessions.json` and uses 
 
 ### Project context / continuity
 
-Worktrace maintains `sessions/context.md` as a reusable project context block.
+The agent maintains `sessions/context.md` as a reusable project context block.
 
-- Local fallback generation exists in the extension.
+- Local fallback generation exists in the agent.
 - AI generation exists in the backend.
 - The context is designed to be pasted into any AI tool manually.
+- Available via the extension command palette or `worktrace context` CLI command.
 
 ### Search and review flows
 
-Current commands let the user:
+Both the extension and CLI let the user:
 
 - search prior sessions by file, branch, mode, or intent keywords
 - open the current project context document
@@ -111,8 +110,6 @@ sessions/
 
 The following roadmap items are not implemented yet:
 
-- `worktrace-agent`
-- CLI commands such as `worktrace start`, `worktrace end`, `worktrace context`, `worktrace usage`
 - automatic prompt enhancement or outbound prompt wrapping
 - provider usage collection for Codex, Claude, Gemini, Cursor, or local cost scans
 - project-configurable safety rules in `.worktrace/rules.yml`

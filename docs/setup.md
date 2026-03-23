@@ -2,19 +2,49 @@
 
 This guide covers the current setup that exists in the repo today:
 
-- the VS Code / Cursor extension
+- the local agent daemon (single source of truth)
+- the VS Code / Cursor extension (thin UI client)
+- the CLI (terminal client)
 - the optional backend used for auth, AI summaries, AI context, and cards
-
-It does not cover the future `worktrace-agent`, CLI, dashboard, or provider usage collectors because those are not implemented yet.
 
 ## System Shape
 
 | Component | Required | Role |
 | --- | --- | --- |
-| Extension (`extension/src/`) | Yes | Local tracking, deterministic summaries, local memory, safety scan, history search |
-| Backend (`backend/`) | No | Google auth, AI summaries, AI project context, cards, usage tracking |
+| Agent (`CLI/packages/agent/`) | Yes | Local daemon on port 9315 — session lifecycle, analysis, safety, memory, context, credentials |
+| Extension (`Extension/src/`) | Optional | Thin VS Code UI client — delegates all logic to agent via HTTP |
+| CLI (`CLI/packages/cli/`) | Optional | Thin terminal client — delegates all logic to agent via HTTP |
+| Backend (`Backend/`) | No | Google auth, AI summaries, AI project context, cards, usage tracking |
 
-The extension works offline. The backend is only needed for signed-in / AI features.
+The agent works offline. The backend is only needed for signed-in / AI features. Use either the extension or CLI (or both) as your client.
+
+## Agent + CLI Setup
+
+### Prerequisites
+
+- Node.js 18+
+
+### Install and run
+
+```bash
+cd CLI
+npm install
+npm run build --workspaces
+```
+
+The agent daemon starts automatically when the extension activates or when you run any CLI command. To start it manually:
+
+```bash
+node packages/agent/dist/server.js
+```
+
+To use the CLI globally:
+
+```bash
+cd CLI
+sudo npm link
+worktrace start
+```
 
 ## Extension Setup
 
@@ -26,14 +56,15 @@ The extension works offline. The backend is only needed for signed-in / AI featu
 ### Install and run
 
 ```bash
-cd extension
+cd Extension
 npm install
 npm run compile
 npm run package
 ```
 
-- `npm run package` produces `worktrace-0.2.0.vsix` inside `extension/`.
-- Open `extension/` in VS Code / Cursor and press `F5` to launch the Extension Development Host.
+- `npm run package` produces `worktrace-0.2.0.vsix` inside `Extension/`.
+- Open `Extension/` in VS Code / Cursor and press `F5` to launch the Extension Development Host.
+- The extension auto-starts the agent daemon on activation.
 
 ### Extension configuration
 
@@ -41,9 +72,7 @@ Open settings and search for `worktrace`.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `worktrace.backendUrl` | `http://localhost:3000` | Backend API URL for auth, AI summaries, AI context, and cards |
-| `worktrace.firebaseApiKey` | `""` | Firebase Web API key used for token refresh |
-| `worktrace.displayName` | `""` | Name shown on shareable cards |
+| `worktrace.agentPath` | `""` | Path to agent `server.js`. Leave empty for auto-detection. |
 | `worktrace.safetyMonitor` | `true` | Enable the safety scan UX |
 
 ### Extension commands
@@ -158,7 +187,7 @@ npm run build
 gcloud run deploy worktrace-backend --source .
 ```
 
-After deployment, set `worktrace.backendUrl` in editor settings to your deployed backend URL.
+After deployment, set the `WORKTRACE_BACKEND_URL` environment variable to your deployed backend URL (defaults to `http://localhost:3000`).
 
 ### Docker
 

@@ -1,6 +1,6 @@
 # Running the Worktrace Backend with Docker
 
-This guide only covers the optional backend. The extension itself does not need Docker and still works offline without the backend.
+This guide only covers the optional backend. The agent and extension do not need Docker and work offline without the backend.
 
 ## Prerequisites
 

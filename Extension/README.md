@@ -1,42 +1,37 @@
 # Worktrace
 
-Worktrace is a local-first VS Code / Cursor extension for AI-assisted development. It tracks real coding sessions, keeps cross-session memory in the workspace, generates deterministic summaries locally, and optionally uses a backend for Google sign-in, AI summaries, AI-generated project context, and shareable cards.
+Worktrace is a thin VS Code / Cursor extension that provides editor-native UI for the Worktrace agent daemon. All business logic (session lifecycle, analysis, safety, memory, context, credentials) lives in the agent; the extension delegates via HTTP.
 
-The product vision in [`../PRODUCT_ROADMAP.md`](../PRODUCT.md) is larger than what ships today. This README describes the current extension package, not the future roadmap.
+The product vision in [`../PRODUCT.md`](../PRODUCT.md) is larger than what ships today. This README describes the current extension package.
 
 ## Current Status
 
 | State | What is true in this repo today |
 | --- | --- |
-| Completed | Worktrace branding, multi-file extension architecture, local session tracking, deterministic summaries, basic safety scan, `.worktrace` session memory, startup "where I left off" prompt, `sessions/context.md`, history search, optional AI summaries/context, shareable cards |
+| Completed | Agent-first architecture, thin-client extension, CLI, local session tracking, deterministic summaries, basic safety scan, `.worktrace` session memory, startup "where I left off" prompt, `sessions/context.md`, history search, shared credential store, optional AI summaries/context, shareable cards |
 | Partial | Proof of work exists as summaries, cards, streaks, and basic backend session records; cloud data exists for auth, usage, profile, and saved AI session metadata, but not full metadata sync/dashboard features |
-| Not built yet | `worktrace-agent`, CLI, prompt enhancer, provider usage intelligence, configurable safety rules, dashboard, export/reporting flows, team features |
+| Not built yet | Prompt enhancer, provider usage intelligence, configurable safety rules, dashboard, export/reporting flows, team features |
 
-## What Ships Today
+## How It Works
 
-### Local-first extension
+### Thin UI client
 
-- Starts tracking automatically when a workspace opens.
-- Records file creates, saves, deletes, opens, edits, git diff, branch, and manual notes.
-- Stores cross-session memory in `.worktrace/sessions.json`.
+- On activation, auto-starts the agent daemon via `ensureAgent()`.
+- All commands delegate to the agent via HTTP (`localhost:9315`).
+- Provides VS Code-native UI: status bar, notifications, quick picks, text viewers.
+- URI handler receives auth callbacks and forwards tokens to the agent.
+- Contains only 4 source files: `extension.ts`, `agent-client.ts`, `types.ts`, `workspace.ts`.
 
-### Deterministic session summaries
+### What the agent provides
 
-- Generates Markdown summaries even with no backend configured.
-- Infers session mode, friction points, tomorrow checklist, confidence, untouched areas, and primary focus files.
-- Writes outputs into `sessions/`.
-
-### Continuity and memory
-
-- Shows a "where I left off" prompt on startup when recent session data exists.
-- Maintains `sessions/context.md` as a reusable project context block for any AI tool.
-- Lets you search session history by file, branch, or intent keywords.
-
-### Safety and proof of work
-
-- Runs a basic diff-based safety scan for secrets, unsafe patterns, and other flagged changes.
-- Generates shareable cards for signed-in users with session activity and streak data.
-- Persists limited AI session metadata in Firestore for cards and usage tracking.
+- Session lifecycle (start, end, note, status)
+- File event capture via chokidar
+- Deterministic analysis and Markdown summaries
+- Cross-session memory in `.worktrace/sessions.json`
+- Continuity context in `sessions/context.md`
+- Safety scanning
+- Credential storage and token refresh (`~/.worktrace/credentials.json`)
+- Backend communication for AI summaries, cards, and user profiles
 
 ### Optional backend enhancements
 
@@ -76,6 +71,16 @@ sessions/
 
 ## Quick Start
 
+### Prerequisites
+
+Build the agent first (the extension requires it):
+
+```bash
+cd CLI
+npm install
+npm run build --workspaces
+```
+
 ### Extension
 
 ```bash
@@ -85,11 +90,11 @@ npm run compile
 npm run package
 ```
 
-Open `Extension/` in VS Code / Cursor and press `F5` to launch the Extension Development Host.
+Open `Extension/` in VS Code / Cursor and press `F5` to launch the Extension Development Host. The extension auto-starts the agent daemon.
 
-### Backend
+### Backend (optional)
 
-The backend is optional. The extension still works offline without it.
+The backend is optional. The extension and agent work offline without it.
 
 ```bash
 cd Backend

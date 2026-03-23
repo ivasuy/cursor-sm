@@ -26,7 +26,7 @@ async function ensureDir(): Promise<void> {
 }
 
 export async function getConfig(): Promise<Config> {
-  const defaultUrl = process.env.WORKTRACE_BACKEND_URL || 'https://api.worktrace.dev';
+  const defaultUrl = process.env.WORKTRACE_BACKEND_URL || 'http://localhost:3000';
   try {
     const raw = await readFile(CONFIG_FILE, 'utf-8');
     return { backendUrl: defaultUrl, ...JSON.parse(raw) };
@@ -49,10 +49,17 @@ export async function getCredentials(): Promise<Credentials | null> {
   }
 }
 
-async function saveCredentials(creds: Credentials): Promise<void> {
+export async function saveCredentials(creds: Credentials): Promise<void> {
   await ensureDir();
   await writeFile(CREDENTIALS_FILE, JSON.stringify(creds, null, 2));
   try { await chmod(CREDENTIALS_FILE, 0o600); } catch { /* Windows no-op */ }
+}
+
+export async function clearCredentials(): Promise<void> {
+  try {
+    const { unlink } = await import('node:fs/promises');
+    await unlink(CREDENTIALS_FILE);
+  } catch { /* file may not exist */ }
 }
 
 export async function isAuthenticated(): Promise<boolean> {

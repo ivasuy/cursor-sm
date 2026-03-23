@@ -8,6 +8,7 @@ const navItems = [
   { id: "watchlist", label: "Watchlist" },
   { id: "surfaces", label: "Surfaces" },
   { id: "principles", label: "Model" },
+  { id: "waitlist", label: "Waitlist" },
   { id: "colophon", label: "Notes" },
 ]
 
@@ -42,27 +43,58 @@ export function SideNav() {
   }
 
   return (
-    <nav className="fixed left-0 top-0 z-50 h-screen w-16 md:w-20 hidden md:flex flex-col justify-center border-r border-border/30 bg-background/80 backdrop-blur-sm">
-      <div className="flex flex-col gap-6 px-4">
-        {navItems.map(({ id, label }) => (
-          <button key={id} onClick={() => scrollToSection(id)} className="group relative flex items-center gap-3">
-            <span
-              className={cn(
-                "h-1.5 w-1.5 rounded-full transition-all duration-300",
-                activeSection === id ? "bg-accent scale-125" : "bg-muted-foreground/40 group-hover:bg-foreground/60",
-              )}
-            />
-            <span
-              className={cn(
-                "absolute left-6 font-mono text-[10px] uppercase tracking-widest opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:left-8 whitespace-nowrap",
-                activeSection === id ? "text-accent" : "text-muted-foreground",
-              )}
+    <>
+      {/* Desktop side nav */}
+      <nav className="fixed left-0 top-0 z-50 h-screen w-16 md:w-20 hidden md:flex flex-col justify-center border-r border-border/30 bg-background/80 backdrop-blur-sm">
+        <div className="flex flex-col gap-6 px-4">
+          {navItems.map(({ id, label }) => (
+            <button key={id} onClick={() => scrollToSection(id)} className="group relative flex items-center gap-3">
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full transition-all duration-300",
+                  activeSection === id ? "bg-accent scale-125" : "bg-muted-foreground/40 group-hover:bg-foreground/60",
+                )}
+              />
+              <span
+                className={cn(
+                  "absolute left-6 font-mono text-[10px] uppercase tracking-widest opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:left-8 whitespace-nowrap",
+                  activeSection === id ? "text-accent" : "text-muted-foreground",
+                )}
+              >
+                {label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Mobile bottom nav */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-accent/10 bg-background/90 backdrop-blur-md">
+        <div className="flex items-center justify-around px-2 py-3">
+          {navItems.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => scrollToSection(id)}
+              className="flex flex-col items-center gap-1"
             >
-              {label}
-            </span>
-          </button>
-        ))}
-      </div>
-    </nav>
+              <span
+                className={cn(
+                  "h-1 w-1 rounded-full transition-all duration-300",
+                  activeSection === id ? "bg-accent scale-150" : "bg-muted-foreground/40",
+                )}
+              />
+              <span
+                className={cn(
+                  "font-mono text-[8px] uppercase tracking-wider transition-colors duration-200",
+                  activeSection === id ? "text-accent" : "text-muted-foreground/60",
+                )}
+              >
+                {label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </nav>
+    </>
   )
 }

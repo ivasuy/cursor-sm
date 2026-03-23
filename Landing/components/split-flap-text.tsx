@@ -189,8 +189,8 @@ function SplitFlapChar({ char, index, animationKey, skipEntrance, speed, playCli
 
   const tileDelay = 0.15 * index
 
-  const bgColor = isSettled ? "rgba(255, 255, 255, 0.06)" : "rgba(255, 255, 255, 0.14)"
-  const textColor = isSettled ? "#f2f2ee" : "#c4c4bf"
+  const bgColor = isSettled ? "rgba(0, 229, 160, 0.06)" : "rgba(0, 229, 160, 0.12)"
+  const textColor = isSettled ? "#e4e6f0" : "#a0a3b5"
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current)
@@ -239,7 +239,7 @@ function SplitFlapChar({ char, index, animationKey, skipEntrance, speed, playCli
       <div
         style={{
           width: "0.3em",
-          fontSize: "clamp(4rem, 15vw, 14rem)",
+          fontSize: "clamp(2.5rem, 12vw, 14rem)",
         }}
       />
     )
@@ -252,7 +252,7 @@ function SplitFlapChar({ char, index, animationKey, skipEntrance, speed, playCli
       transition={{ delay: tileDelay, duration: 0.3, ease: "easeOut" }}
       className="relative overflow-hidden flex items-center justify-center font-[family-name:var(--font-bebas)]"
       style={{
-        fontSize: "clamp(4rem, 15vw, 14rem)",
+        fontSize: "clamp(2.5rem, 12vw, 14rem)",
         width: "0.65em",
         height: "1.05em",
         backgroundColor: bgColor,

@@ -8,7 +8,7 @@
 
 Worktrace evolves into a local-first system with three distinct layers:
 
-- **Extension / editor client** - the always-on UX layer in VS Code/Cursor that captures file events, renders summaries, and surfaces safety/memory signals
+- **Extension / editor client** - a thin VS Code/Cursor UI client that delegates all business logic to the local agent and provides editor-native UX (status bar, notifications, quick picks, URI handler)
 - **Local Worktrace agent (`worktrace-agent`)** - a bundled cross-platform runtime that owns session memory, deterministic analysis, safety monitoring, git/file access, and future provider usage collection
 - **Cloud backend** - auth, plans, optional AI summaries, dashboard sync, and future team/reporting features
 
@@ -114,7 +114,7 @@ This keeps the cloud backend focused on metadata and AI enhancement, while the l
 | --- | --- | --- |
 | ~~Phase 1~~ | ~~Rebrand to Worktrace, refactor extension into multi-file architecture, safety monitor (basic), improved session summaries~~ | ~~Foundation~~ **COMPLETED** |
 | ~~Phase 2~~ | ~~Cross-session memory, continuity engine, context injection, `.worktrace/` local data store~~ | ~~Core differentiator~~ **COMPLETED** |
-| ~~Phase 3~~ | ~~`worktrace-agent`, CLI tool~~, prompt enhancer, local usage intelligence | ~~Platform expansion~~ **AGENT + CLI SHIPPED** |
+| ~~Phase 3~~ | ~~`worktrace-agent`, CLI tool, extension thin-client rewrite~~, prompt enhancer, local usage intelligence | ~~Platform expansion~~ **AGENT + CLI + THIN CLIENT SHIPPED** |
 | Phase 4 | Web dashboard, cloud metadata sync, agent-backed usage timeline | Visualization + teams |
 | Phase 5 | Team features, exportable reports, billing | Monetization |
 
@@ -124,19 +124,20 @@ This section reflects what is implemented in the codebase today. It is intention
 
 ### Implemented in the repo today
 
-- Worktrace-branded VS Code / Cursor extension with a multi-file architecture (`Extension/`)
+- **`worktrace-agent`** — local daemon on `localhost:9315` owning session lifecycle, analysis, safety, memory, context, credentials, and history (`CLI/packages/agent/`)
+- **`worktrace` CLI** — terminal-first client with Matrix-themed UX: `start`, `end`, `status`, `context`, `history`, `check`, `note`, `login`, `card` (`CLI/packages/cli/`)
+- **Thin-client extension** — VS Code/Cursor extension that delegates all business logic to the agent via HTTP; provides only UI (status bar, notifications, quick picks, URI handler) (`Extension/`)
+- **Agent-first architecture** — agent is the single source of truth; extension and CLI are both thin HTTP clients
 - Local session tracking with deterministic summaries
 - Basic diff-based safety scanning
 - Local `.worktrace` session store for cross-session memory
 - Startup "where I left off" prompt based on recent local session history
 - `sessions/context.md` generation for continuity / context injection
-- Session history search from the extension
+- Session history search from the extension and CLI
+- Shared credential store (`~/.worktrace/credentials.json`) across extension and CLI
 - Optional backend-powered AI session summaries (`Backend/`)
 - Optional backend-powered AI project context generation
 - Shareable session cards
-- **`worktrace-agent`** — local daemon on `localhost:9315` owning session lifecycle, analysis, safety, memory, context, and history (`CLI/packages/agent/`)
-- **`worktrace` CLI** — terminal-first client with Matrix-themed UX: `start`, `end`, `status`, `context`, `history`, `check`, `note`, `login`, `card` (`CLI/packages/cli/`)
-- **Agent-first architecture** — extension and CLI share the same core runtime via `@worktrace/agent`
 
 ### Partial or narrower than the vision
 

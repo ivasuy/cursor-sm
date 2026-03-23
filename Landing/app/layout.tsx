@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/worktrace-logo.svg",
+        url: "/icon.svg",
         type: "image/svg+xml",
       },
     ],

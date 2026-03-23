@@ -94,15 +94,15 @@ export function PrinciplesSection() {
   }, [])
 
   return (
-    <section ref={sectionRef} id="principles" className="relative py-32 pl-6 md:pl-28 pr-6 md:pr-12">
+    <section ref={sectionRef} id="principles" className="relative py-20 md:py-32 pl-6 md:pl-28 pr-6 md:pr-12">
       {/* Section header */}
-      <div ref={headerRef} className="mb-24">
+      <div ref={headerRef} className="mb-14 md:mb-24">
         <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-accent">03 / Model</span>
-        <h2 className="mt-4 font-[var(--font-bebas)] text-5xl md:text-7xl tracking-tight">OPERATING MODEL</h2>
+        <h2 className="mt-3 md:mt-4 font-[var(--font-bebas)] text-4xl md:text-7xl tracking-tight">OPERATING MODEL</h2>
       </div>
 
       {/* Staggered principles */}
-      <div ref={principlesRef} className="space-y-24 md:space-y-32">
+      <div ref={principlesRef} className="space-y-16 md:space-y-32">
         {principles.map((principle, index) => (
           <article
             key={index}
