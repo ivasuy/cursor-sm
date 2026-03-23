@@ -174,7 +174,8 @@ function renderProviderCard(p: ProviderUsage): string {
     if (p.credits.unlimited) {
       lines.push(`${pad}${d('credits')}      ${g('unlimited')}`);
     } else if (p.credits.balance !== null) {
-      lines.push(`${pad}${d('credits')}      ${g(p.credits.currency + p.credits.balance.toFixed(2))} ${d('remaining')}`);
+      const bal = Number(p.credits.balance);
+      lines.push(`${pad}${d('credits')}      ${g(p.credits.currency + bal.toFixed(2))} ${d('remaining')}`);
     }
   }
 
@@ -286,7 +287,8 @@ export const usageCommand = new Command('usage')
         p.plan || d('—'),
         resetLabel(p.resetAt, p.resetWindow),
         p.costUsd !== null ? w('$' + p.costUsd.toFixed(2))
-          : p.credits?.balance !== null && p.credits ? g(p.credits.currency + p.credits.balance.toFixed(2))
+          : p.credits && p.credits.balance !== null ? g(p.credits.currency + Number(p.credits.balance).toFixed(2))
+          : p.credits?.unlimited ? g('unlimited')
           : d('—'),
       ]),
     );

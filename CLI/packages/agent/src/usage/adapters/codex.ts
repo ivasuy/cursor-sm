@@ -219,7 +219,7 @@ export class CodexAdapter extends BaseAdapter {
     let credits: ProviderUsage['credits'] = null;
     if (data.credits) {
       credits = {
-        balance: data.credits.balance ?? null,
+        balance: data.credits.balance != null ? Number(data.credits.balance) : null,
         unlimited: data.credits.unlimited ?? false,
         currency: 'USD',
       };
