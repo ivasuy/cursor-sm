@@ -43,6 +43,15 @@ CodexBar solves the provider-level quota view. Worktrace's unique moat is the pe
 | `CLI/packages/agent/src/usage/manager.ts` | Replaced by new provider registry + fetch pipeline |
 | `CLI/packages/agent/src/usage/cache.ts` | Replaced by `_shared/cache.ts` with SQLite backing |
 | `CLI/packages/agent/src/usage/platform/` | Merged into `_host/` |
+| `CLI/packages/cli/src/commands/card.ts` | Card generation removed |
+| `CLI/packages/cli/src/commands/check.ts` | Safety scan removed |
+| `CLI/packages/cli/src/commands/context.ts` | Continuity context removed |
+| `CLI/packages/cli/src/commands/end.ts` | Session end removed |
+| `CLI/packages/cli/src/commands/history.ts` | Session history removed |
+| `CLI/packages/cli/src/commands/login.ts` | Firebase auth removed |
+| `CLI/packages/cli/src/commands/note.ts` | Session notes removed |
+| `CLI/packages/cli/src/commands/start.ts` | Replaced by `watch` |
+| `CLI/packages/cli/src/commands/status.ts` | Replaced by `report` / `providers` |
 
 **~60% of current code deleted.**
 
@@ -59,8 +68,27 @@ CodexBar solves the provider-level quota view. Worktrace's unique moat is the pe
 | `CLI/packages/agent/src/core/types.ts` | Base type definitions | Rewrite for new domain |
 | `CLI/packages/agent/src/usage/types.ts` | `ProviderId` enum, basic types | Extend with descriptor/strategy types |
 | `Extension/src/` (all 4 files) | VS Code extension shell | Swap commands from session to report |
+| `CLI/packages/cli/src/index.ts` | Entry point, CLI router, version/help | Rewrite command registrations (10 → 14) |
+| `CLI/packages/cli/src/agent-client.ts` | HTTP helpers to daemon on 9315 | Retarget routes: `/repos`, `/worktrees`, `/providers`, `/features`, `/files`, `/pace`, `/watch`, `/report` |
+| `CLI/packages/cli/src/messages.ts` | Matrix-themed terminal messages | Keep theme, swap session-specific strings for report-specific |
+| `CLI/packages/cli/src/output.ts` | Terminal formatting helpers | Add progress bar, pace indicator, quota bar renderers |
+| `CLI/packages/cli/src/commands/usage.ts` | `worktrace usage` entry | Rewire to new `/usage` route; keep shape for backward compat |
+| `CLI/package.json` | Monorepo workspaces root | Keep workspaces config (`packages/agent`, `packages/cli`) unchanged |
+| `CLI/packages/cli/package.json` | CLI package manifest | Drop Firebase/session deps; add progress bar lib if needed |
 
-### 3.3 New Directory Layout
+### 3.3 Monorepo Layout
+
+Worktrace is an npm-workspaces monorepo rooted at `CLI/`. The pivot keeps both workspaces; only their contents change. No new workspace packages are added in v0.1.
+
+```
+CLI/                              — monorepo root (unchanged)
+  package.json                    — workspaces: packages/agent, packages/cli (unchanged)
+  packages/
+    agent/                        — @worktrace/agent (rewritten internals, same package name)
+    cli/                          — worktrace CLI (rewritten commands, same package name)
+```
+
+### 3.4 New Directory Layout — Agent
 
 ```
 CLI/packages/agent/src/
@@ -157,7 +185,35 @@ CLI/packages/agent/src/
     report.ts                  — GET /report (full roll-up)
 ```
 
-### 3.4 SQLite Schema
+### 3.5 New Directory Layout — CLI
+
+```
+CLI/packages/cli/src/
+  index.ts                     — entry point, command router, --help, --version
+  agent-client.ts              — typed HTTP client for new agent routes
+  messages.ts                  — Matrix-themed strings (retained)
+  output.ts                    — renderers: progress bars, quota bars, pace indicators, tables
+
+  commands/
+    repos.ts                   — `worktrace repos` and `worktrace repos <name>`
+    worktrees.ts               — `worktrace worktrees` and `worktrace worktrees <path>`
+    providers.ts               — `worktrace providers` and `worktrace providers <id>`
+    features.ts                — `worktrace features` and `worktrace features <branch>`
+    files.ts                   — `worktrace files` and `worktrace files <path>`
+    pace.ts                    — `worktrace pace`
+    watch.ts                   — `worktrace watch` (and implicit unwatch on repeat)
+    usage.ts                   — `worktrace usage` (rewired; backward-compat entry)
+    report.ts                  — `worktrace report` (paginated full roll-up)
+
+  renderers/                   — (new) pure functions for terminal output
+    progress-bar.ts            — CodexBar-style bar (used/cap, pct, pace label)
+    quota-card.ts              — single-provider detail card
+    table.ts                   — borderless column layout for list commands
+```
+
+**CLI is a thin HTTP client.** Every command: parse args → call `agent-client` → pass response to `renderers` → print. No business logic in the CLI package.
+
+### 3.6 SQLite Schema
 
 ```sql
 -- WAL mode for concurrent daemon + CLI reads
@@ -634,6 +690,15 @@ CLI/packages/agent/src/usage/adapters/* → deleted (all 17 flat files)
 CLI/packages/agent/src/usage/manager.ts → deleted
 CLI/packages/agent/src/usage/cache.ts → deleted
 CLI/packages/agent/src/usage/platform/ → deleted
+CLI/packages/cli/src/commands/card.ts    → deleted
+CLI/packages/cli/src/commands/check.ts   → deleted
+CLI/packages/cli/src/commands/context.ts → deleted
+CLI/packages/cli/src/commands/end.ts     → deleted
+CLI/packages/cli/src/commands/history.ts → deleted
+CLI/packages/cli/src/commands/login.ts   → deleted
+CLI/packages/cli/src/commands/note.ts    → deleted
+CLI/packages/cli/src/commands/start.ts   → deleted (replaced by watch.ts)
+CLI/packages/cli/src/commands/status.ts  → deleted
 ```
 
 ### Moved / Evolved
@@ -644,6 +709,11 @@ CLI/packages/agent/src/core/file-utils.ts → CLI/packages/agent/src/report/file
 CLI/packages/agent/src/core/constants.ts  → CLI/packages/agent/src/report/constants.ts (merged)
 CLI/packages/agent/src/core/types.ts      → CLI/packages/agent/src/providers/_shared/types.ts (rewritten)
 CLI/packages/agent/src/usage/types.ts     → CLI/packages/agent/src/providers/_shared/types.ts (merged)
+CLI/packages/cli/src/index.ts             → CLI/packages/cli/src/index.ts (command router rewritten)
+CLI/packages/cli/src/agent-client.ts      → CLI/packages/cli/src/agent-client.ts (routes swapped)
+CLI/packages/cli/src/messages.ts          → CLI/packages/cli/src/messages.ts (strings refreshed, theme kept)
+CLI/packages/cli/src/output.ts            → CLI/packages/cli/src/output.ts (progress/quota/pace renderers added)
+CLI/packages/cli/src/commands/usage.ts    → CLI/packages/cli/src/commands/usage.ts (rewired, backward compat)
 ```
 
 ### New
@@ -661,6 +731,8 @@ CLI/packages/agent/src/providers/kiro/      (2 files — descriptor, strategies)
 CLI/packages/agent/src/providers/{9 stubs}/ (1 file each — descriptor)
 CLI/packages/agent/src/report/              (9 files — db, repo-registry, worktree-scanner, activity-writer, sample-writer, attribution-writer, report-service, file-utils, git)
 CLI/packages/agent/src/routes/              (9 files — repos, worktrees, providers, features, files, pace, watch, usage, report)
+CLI/packages/cli/src/commands/              (8 new files — repos, worktrees, providers, features, files, pace, watch, report; usage.ts retained)
+CLI/packages/cli/src/renderers/             (3 files — progress-bar, quota-card, table)
 ```
 
 ## 11. Implementation Phases
@@ -671,7 +743,9 @@ CLI/packages/agent/src/routes/              (9 files — repos, worktrees, provi
 - Provider `_shared/` interfaces + `_host/` stubs
 - Registry that loads descriptors
 - Empty route handlers wired to Express
-- `worktrace watch` registers a repo
+- CLI command router rewired (`index.ts`) to new 14-command surface
+- Delete obsolete CLI command files; stub new command files that call agent-client
+- `worktrace watch` registers a repo end-to-end (CLI → agent → SQLite)
 
 ### Phase 2 — Hero Providers (est. 4-5 days)
 
@@ -692,10 +766,10 @@ CLI/packages/agent/src/routes/              (9 files — repos, worktrees, provi
 
 ### Phase 4 — Presentation Polish (est. 2-3 days)
 
-- Progress bars (CodexBar style) in CLI
-- Pace calculator + runway ETA
-- `worktrace pace`, `worktrace report` working
-- Extension status bar + commands
+- CLI renderers: `progress-bar.ts`, `quota-card.ts`, `table.ts`
+- Pace calculator + runway ETA in agent's `report-service`
+- `worktrace pace`, `worktrace report` fully wired through CLI renderers
+- Extension status bar + 6 commands
 - Stretch providers (Gemini, Augment, Kiro)
 - 7-day burn-in begins
 
