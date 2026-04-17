@@ -1,119 +1,79 @@
-export type FileEventType = "create" | "save" | "delete";
+export type PaceStatus = 'ahead' | 'on-track' | 'warning' | 'critical';
 
-export type FileCategory = "Logic" | "UI" | "Config" | "Docs" | "Test" | "Other";
+export interface QuotaBar {
+  used: number;
+  cap: number;
+  unit: string;
+  resetsAt: string | number;
+  label?: string;
+}
 
-export type WorkIntent =
-  | "focused-deep-work"
-  | "active-iteration"
-  | "ui-behavior-work"
-  | "experimentation"
-  | "exploration"
-  | "debugging-thinking"
-  | "mixed";
+export interface ModelUsage {
+  model: string;
+  tokens: number;
+  costUSD: number;
+}
 
-export type SessionData = {
-  sessionId: string;
-  workspacePath: string;
-  startTime: string;
-  endTime: string | null;
-  filesTouched: string[];
-  saveCounts: Record<string, number>;
-  fileChangeEvents: {
-    file: string;
-    eventType: FileEventType;
-    timestamp: string;
-  }[];
-  gitDiff: string | null;
-  branch: string | null;
-};
+export interface ProviderSnapshot {
+  session?: QuotaBar;
+  weekly?: QuotaBar;
+  secondary?: QuotaBar;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUSD?: number;
+  creditsRemainingUSD?: number;
+  cost?: { today: number; last30d: number; totalTokens: number; todayTokens?: number };
+  sessionCount?: number;
+  modelBreakdown?: ModelUsage[];
+  extraUsage?: { label: string; used: number; cap: number; unit: string };
+  updatedAt: string | number;
+  identity?: { email?: string; username?: string; plan?: string };
+}
 
-export type DiffFileSummary = {
-  file: string;
-  added: number;
-  removed: number;
-  addedLines: string[];
-  removedLines: string[];
-};
-
-export type SessionDelta = {
-  created: { file: string; content: string[]; fullContent: string }[];
-  updated: {
-    file: string;
-    added: number;
-    removed: number;
-    addedLines: string[];
-    removedLines: string[];
-    fullContent: string;
-  }[];
-  deleted: {
-    file: string;
-    affectedFiles: { file: string; content: string }[];
-  }[];
-};
-
-export type ConfidenceLevel = "Low" | "Medium" | "High";
-
-export type SessionAnalysis = {
-  sessionMode: string;
-  confidence: { level: ConfidenceLevel; explanation: string };
-  delta: SessionDelta;
-  frictionPoints: string[];
-  tomorrowChecklist: string[];
-  explicitlyDidntTouch: string[];
-  userNote: string | null;
-  primaryFocusFiles: { file: string; reason: string }[];
-  intentDescription: string;
-};
-
-export type SafetyWarning = {
-  severity: "info" | "warning" | "critical";
-  category: string;
-  message: string;
-  file?: string;
-  line?: string;
-  lineIndex?: number;
-  context?: string[];
-};
-
-export type CodeChangeSummary = {
-  file: string;
-  linesAdded: number;
-  linesRemoved: number;
-  functionsAdded: string[];
-  importsChanged: boolean;
-};
-
-// ============================================================================
-// CROSS-SESSION MEMORY (Phase 2)
-// ============================================================================
-
-export type StoredSession = {
+export interface ProviderListRow {
   id: string;
-  startTime: string;
-  endTime: string;
-  branch: string | null;
-  filesTouched: string[];
-  saveCounts: Record<string, number>;
-  sessionMode: string;
-  confidence: ConfidenceLevel;
-  frictionPoints: string[];
-  tomorrowChecklist: string[];
-  intentDescription: string;
-  safetyWarningCount: number;
-};
+  displayName: string;
+  vendor: string;
+  category: string;
+  live: boolean;
+  available?: boolean;
+}
 
-export type ChurnHotspot = {
-  file: string;
-  sessionCount: number;
-  totalSaves: number;
-  lastSeen: string;
-};
+export interface ProviderListResponse {
+  providers: ProviderListRow[];
+}
 
-export type SessionMemory = {
-  lastSession: StoredSession | null;
-  totalSessions: number;
-  churnHotspots: ChurnHotspot[];
-  recurringFriction: string[];
-  recentBranches: string[];
-  openTodos: string[];
-};
+export interface ProviderDetailResponse {
+  descriptor: {
+    id: string;
+    metadata: { displayName: string; vendor: string; category: string; website: string };
+    branding: { icon: string; accentColor: string };
+  };
+  snapshot: ProviderSnapshot | null;
+  status: 'live' | 'coming-soon' | 'error';
+  error?: string;
+}
+
+export interface PacePaceData {
+  expectedPct: number;
+  actualPct: number;
+  paceDelta: number;
+  status: PaceStatus;
+  burnRatePerMs: number;
+  runwayMs: number | null;
+  etaAt: number | null;
+}
+
+export interface PaceProvider {
+  id: string;
+  displayName: string;
+  icon: string;
+  pace: PacePaceData | null;
+  quota: { used: number; limit: number; unit: string; resetsAt: number } | null;
+  error?: string;
+}
+
+export interface PaceResponse {
+  fetchedAt: number;
+  providers: PaceProvider[];
+}
