@@ -1,84 +1,79 @@
-export interface SessionStartResponse {
-  sessionId: string;
-  startTime: string;
-  branch: string | null;
+export type PaceStatus = 'ahead' | 'on-track' | 'warning' | 'critical';
+
+export interface QuotaBar {
+  used: number;
+  cap: number;
+  unit: string;
+  resetsAt: string | number;
+  label?: string;
 }
 
-export interface SessionEndResponse {
-  summaryPath: string;
-  contextPath: string;
-  safetyWarnings: SafetyWarning[];
-  aiSummary: boolean;
+export interface ModelUsage {
+  model: string;
+  tokens: number;
+  costUSD: number;
 }
 
-export interface SafetyWarning {
-  severity: string;
-  message: string;
-  file?: string;
-  line?: number;
+export interface ProviderSnapshot {
+  session?: QuotaBar;
+  weekly?: QuotaBar;
+  secondary?: QuotaBar;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUSD?: number;
+  creditsRemainingUSD?: number;
+  cost?: { today: number; last30d: number; totalTokens: number; todayTokens?: number };
+  sessionCount?: number;
+  modelBreakdown?: ModelUsage[];
+  extraUsage?: { label: string; used: number; cap: number; unit: string };
+  updatedAt: string | number;
+  identity?: { email?: string; username?: string; plan?: string };
 }
 
-export interface SessionStatus {
-  active: boolean;
-  sessionId?: string;
-  duration?: number;
-  branch?: string;
-  filesTouched?: number;
-  totalSaves?: number;
-  events?: number;
-  notes?: number;
-}
-
-export interface AuthStatus {
-  authenticated: boolean;
-  email?: string;
-  userId?: string;
-  displayName?: string;
-}
-
-export interface AuthLoginResponse {
-  authUrl: string;
-}
-
-export interface AuthCallbackResponse {
-  email: string;
-  userId: string;
-}
-
-export interface HistorySession {
+export interface ProviderListRow {
   id: string;
-  startTime: string;
-  endTime: string;
-  branch: string | null;
-  filesTouched: string[];
-  sessionMode: string;
-  confidence: string;
-  frictionPoints: string[];
-  tomorrowChecklist: string[];
-  intentDescription: string;
-  linesAdded?: number;
-  linesRemoved?: number;
+  displayName: string;
+  vendor: string;
+  category: string;
+  live: boolean;
+  available?: boolean;
 }
 
-export interface HistoryResponse {
-  sessions: HistorySession[];
+export interface ProviderListResponse {
+  providers: ProviderListRow[];
 }
 
-export interface ContextResponse {
-  context: string | null;
+export interface ProviderDetailResponse {
+  descriptor: {
+    id: string;
+    metadata: { displayName: string; vendor: string; category: string; website: string };
+    branding: { icon: string; accentColor: string };
+  };
+  snapshot: ProviderSnapshot | null;
+  status: 'live' | 'coming-soon' | 'error';
+  error?: string;
 }
 
-export interface SafetyCheckResponse {
-  warnings: SafetyWarning[];
+export interface PacePaceData {
+  expectedPct: number;
+  actualPct: number;
+  paceDelta: number;
+  status: PaceStatus;
+  burnRatePerMs: number;
+  runwayMs: number | null;
+  etaAt: number | null;
 }
 
-export interface CardResponse {
-  cardPath: string;
+export interface PaceProvider {
+  id: string;
+  displayName: string;
+  icon: string;
+  pace: PacePaceData | null;
+  quota: { used: number; limit: number; unit: string; resetsAt: number } | null;
+  error?: string;
 }
 
-export interface HealthResponse {
-  status: string;
-  uptime: number;
-  version: string;
-  activeSessions: number;
+export interface PaceResponse {
+  fetchedAt: number;
+  providers: PaceProvider[];
 }

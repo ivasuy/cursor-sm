@@ -1,55 +1,73 @@
-# Worktrace
+# Worktrace Report
 
-"The operating system for AI-assisted development." Session tracking, safety monitoring, and proof of work for AI-assisted coding.
+Worktrace is a local-first monorepo for tracking AI tooling usage by repo, worktree, branch, and file activity.
 
-## Architecture
+It runs as:
+- a local daemon (`cli/packages/agent`) with SQLite storage
+- a terminal client (`cli/packages/cli`)
+- a VS Code/Cursor extension (`extension`)
 
-| Path | Role |
+## Monorepo Layout
+
+| Path | Purpose |
 | --- | --- |
-| `CLI/packages/agent/` | Local daemon (port 9315) — single source of truth for session lifecycle, analysis, safety, memory, context, and credentials |
-| `CLI/packages/cli/` | Terminal client — Matrix-themed UX, thin HTTP client to agent |
-| `Extension/` | VS Code / Cursor extension — thin UI client, delegates all logic to the agent via HTTP |
-| `Backend/` | Optional backend for Google sign-in, AI summaries/context, usage tracking, and shareable cards |
+| `cli/packages/agent` | HTTP daemon on `127.0.0.1:9315`, provider fetch pipelines, attribution engine, report routes |
+| `cli/packages/cli` | `worktrace` command, human-readable rendering, JSON mode |
+| `extension` | VS Code extension with status bar and report commands |
+| `docs` | specs, implementation plan, usage and operations docs |
 
 ## Quick Start
 
-### Agent + CLI
+### 1) Build the monorepo
 
 ```bash
-cd CLI
+cd cli
 npm install
 npm run build --workspaces
-sudo npm link                          # optional: makes `worktrace` available globally
-worktrace start                        # starts agent daemon + begins session
 ```
 
-### Extension
+### 2) Start the agent
 
 ```bash
-cd Extension
-npm install
-npm run compile
-npm run package
+node packages/agent/dist/server.js
 ```
 
-Open `Extension/` in VS Code / Cursor and press `F5` to launch the Extension Development Host. The extension auto-starts the agent daemon.
-
-### Backend (optional)
+### 3) Use the CLI (new shell)
 
 ```bash
-cd Backend
-npm install
-cp .env.example .env
-npm run dev
+cd cli
+node packages/cli/dist/index.js watch
+node packages/cli/dist/index.js providers
+node packages/cli/dist/index.js pace
+node packages/cli/dist/index.js report --period 7d
 ```
 
-## Docs
+## Core Commands
 
-- [Extension README](Extension/README.md)
-- [Setup Guide](Docs/SETUP.md)
-- [Architecture](Docs/ARCHITECTURE.md)
-- [Feature Overview](Docs/OVERVIEW.md)
-- [Docker Backend Guide](Docs/DOCKER.md)
-- [Product Roadmap](PRODUCT.md)
+- `worktrace watch` / `worktrace watch --stop`
+- `worktrace providers [id]`
+- `worktrace usage`
+- `worktrace repos`
+- `worktrace worktrees`
+- `worktrace features [branch]`
+- `worktrace files [path]`
+- `worktrace pace`
+- `worktrace report --period 7d|30d|all`
 
-License information for the packaged extension lives in [Extension/LICENSE](Extension/LICENSE).
+Use `--json` on any command for raw output.
+
+## Configuration
+
+| Env Var | Default | Description |
+| --- | --- | --- |
+| `WORKTRACE_AGENT_PORT` | `9315` | Agent port for CLI + extension |
+| `WORKTRACE_AGENT_PATH` | auto | CLI override for agent `server.js` path |
+| `WORKTRACE_DATA_DIR` | `~/.worktrace` | SQLite and runtime data directory |
+| `GEMINI_API_KEY` | unset | Enables live Gemini usage fetch strategy |
+| `ANTHROPIC_API_KEY` | unset | Claude API-key fallback strategy |
+
+## Documentation
+
+- [Architecture](ARCHITECTURE.md)
+- [CLI Guide](cli/README.md)
+- [Extension Guide](extension/README.md)

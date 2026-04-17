@@ -1,113 +1,81 @@
-# CLAUDE.md
+<!-- dgc-policy-v11 -->
+# Dual-Graph Context Policy
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This project uses a local dual-graph MCP server for efficient context retrieval.
 
-## Project Overview
+## MANDATORY: Always follow this order
 
-Worktrace — "The operating system for AI-assisted development." A VS Code/Cursor extension that tracks coding sessions, runs safety monitoring on AI-generated code, and generates structured Markdown summaries. Works offline with deterministic analysis; optionally enhanced with AI summaries via a backend powered by Google Vertex AI (Gemini).
+1. **Call `graph_continue` first** — before any file exploration, grep, or code reading.
 
-## Architecture
+2. **If `graph_continue` returns `needs_project=true`**: call `graph_scan` with the
+   current project directory (`pwd`). Do NOT ask the user.
 
-Three independent components with separate dependency trees:
+3. **If `graph_continue` returns `skip=true`**: project has fewer than 5 files.
+   Do NOT do broad or recursive exploration. Read only specific files if their names
+   are mentioned, or ask the user what to work on.
 
-- **Extension** (`Extension/src/`) — Thin VS Code UI client. Delegates all business logic (session lifecycle, analysis, safety, auth) to the agent daemon via HTTP. Provides VS Code-native UI: status bar, notifications, quick picks, text viewers, and URI handler for auth callbacks. Auto-starts the agent on activation.
-- **Backend** (`Backend/`) — Express server with Firebase Auth, Firestore for user/plan/usage data, and Vertex AI for summary generation. Starts in degraded mode (503 on auth/session routes) if Firebase service account is missing.
-- **CLI + Agent** (`CLI/`) — npm workspaces monorepo containing `@worktrace/agent` (local daemon on port 9315) and `worktrace` CLI (terminal client). The agent owns session lifecycle, analysis, safety, memory, and context. The CLI is a thin HTTP client with Matrix-themed terminal UX.
+4. **Read `recommended_files`** using `graph_read` — **one call per file**.
+   - `graph_read` accepts a single `file` parameter (string). Call it separately for each
+     recommended file. Do NOT pass an array or batch multiple files into one call.
+   - `recommended_files` may contain `file::symbol` entries (e.g. `src/auth.ts::handleLogin`).
+     Pass them verbatim to `graph_read(file: "src/auth.ts::handleLogin")` — it reads only
+     that symbol's lines, not the full file.
+   - Example: if `recommended_files` is `["src/auth.ts::handleLogin", "src/db.ts"]`,
+     call `graph_read(file: "src/auth.ts::handleLogin")` and `graph_read(file: "src/db.ts")`
+     as two separate calls (they can be parallel).
 
-### Extension Module Structure
+5. **Check `confidence` and obey the caps strictly:**
+   - `confidence=high` -> Stop. Do NOT grep or explore further.
+   - `confidence=medium` -> If recommended files are insufficient, call `fallback_rg`
+     at most `max_supplementary_greps` time(s) with specific terms, then `graph_read`
+     at most `max_supplementary_files` additional file(s). Then stop.
+   - `confidence=low` -> Call `fallback_rg` at most `max_supplementary_greps` time(s),
+     then `graph_read` at most `max_supplementary_files` file(s). Then stop.
 
-| Module | Purpose |
-| --- | --- |
-| `Extension/src/extension.ts` | Entry point — activate/deactivate, 9 command registrations, URI handler for auth callbacks |
-| `Extension/src/agent-client.ts` | HTTP client to agent daemon — `ensureAgent()`, typed GET/POST/PATCH helpers, fire-and-forget POST |
-| `Extension/src/types.ts` | Agent response interfaces (SessionStatus, AuthStatus, SafetyCheckResponse, etc.) |
-| `Extension/src/workspace.ts` | VS Code workspace utility functions |
+## Token Usage
 
-Key data flow: Extension activates → `ensureAgent()` spawns daemon if needed → `POST /session/start` → agent's chokidar watches file events → `POST /session/end` triggers full pipeline in agent → summary opened in editor.
+A `token-counter` MCP is available for tracking live token usage.
 
-## Build & Run Commands
+- To check how many tokens a large file or text will cost **before** reading it:
+  `count_tokens({text: "<content>"})`
+- To log actual usage after a task completes (if the user asks):
+  `log_usage({input_tokens: <est>, output_tokens: <est>, description: "<task>"})`
+- To show the user their running session cost:
+  `get_session_stats()`
 
-### Extension
-```bash
-cd extension
-npm install          # Install extension dependencies
-npm run compile      # TypeScript compile (tsc -p .)
-npm run watch        # Watch mode (tsc -w -p .)
-npm run package      # Package as .vsix (vsce package)
+Live dashboard URL is printed at startup next to "Token usage".
+
+## Rules
+
+- Do NOT use `rg`, `grep`, or bash file exploration before calling `graph_continue`.
+- Do NOT do broad/recursive exploration at any confidence level.
+- `max_supplementary_greps` and `max_supplementary_files` are hard caps - never exceed them.
+- Do NOT dump full chat history.
+- Do NOT call `graph_retrieve` more than once per turn.
+- After edits, call `graph_register_edit` with the changed files. Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook.
+
+## Context Store
+
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call `graph_add_memory`.
+
+**To add an entry:**
 ```
-Test locally: Open `extension/` in VS Code/Cursor and press `F5` to launch Extension Development Host.
-
-### Backend
-```bash
-cd backend
-npm install          # Install backend dependencies
-npm run dev          # Dev server with auto-reload (ts-node-dev)
-npm run build        # TypeScript compile
-npm run start        # Run compiled JS (node dist/index.js)
+graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
 ```
 
-### CLI + Agent
-```bash
-cd CLI
-npm install          # Install workspace dependencies
-npm run build --workspaces  # Build agent + CLI
-node packages/cli/dist/index.js start  # Run CLI locally
-```
+**Do NOT write context-store.json directly** — always use `graph_add_memory`. It applies pruning and keeps the store healthy.
 
-### Docker
-```bash
-cd backend
-docker compose up    # Runs backend on port 3000 and mounts .env plus secrets/
-```
+**Rules:**
+- Only log things worth remembering across sessions (not every minor detail)
+- `content` must be under 15 words
+- `files` lists the files this decision/task relates to (can be empty)
+- Log immediately when the item arises — not at session end
 
-## Agent Routes
+## Session End
 
-Local daemon on `127.0.0.1:9315`:
-- `GET /health` — agent health check
-- `POST /session/start` — start session tracking for a workspace
-- `POST /session/end` — end session, run full pipeline (delta → analysis → safety → render)
-- `POST /session/note` — add note to active session
-- `GET /session/status` — current session status
-- `GET /context` — generate continuity context for a workspace
-- `GET /history` — search past sessions
-- `POST /safety/check` — run safety scan on uncommitted changes
-- `POST /auth/login` — OAuth login flow (CLI: full browser flow; Extension: returns auth URL with scheme param)
-- `POST /auth/callback` — receives auth tokens from extension URI handler
-- `POST /auth/logout` — clear stored credentials
-- `GET /auth/status` — current auth status (includes email, userId, displayName)
-- `POST /card/generate` — generate shareable session card
-- `PATCH /profile` — update display name
+When the user signals they are done (e.g. "bye", "done", "wrap up", "end session"), proactively update `CONTEXT.md` in the project root with:
+- **Current Task**: one sentence on what was being worked on
+- **Key Decisions**: bullet list, max 3 items
+- **Next Steps**: bullet list, max 3 items
 
-## Backend Environment
-
-Requires `backend/.env` with Firebase and Vertex AI credentials (see `backend/.env.example`). Service account keys go in `backend/secrets/`. Critical env vars: `FIREBASE_SERVICE_ACCOUNT_PATH`, `VERTEX_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`.
-
-## Backend Route Structure
-
-All routes under `/api/`:
-- `/api/config` — public, returns server status and feature flags
-- `/api/auth` — serves Google Sign-In HTML page, guarded by Firebase readiness
-- `/api/session` — `POST /summarize` accepts enriched session payload, verifies auth, checks usage quota, calls Vertex AI
-- `/api/user` — user profile management
-- `/api/card` — shareable session card generation (uses `sharp` for image processing)
-
-Auth middleware (`backend/src/middleware/auth.ts`) verifies Firebase ID tokens on protected routes.
-
-## Extension Commands
-
-All commands use `worktrace.*` namespace:
-- `worktrace.endSession` — End session and generate summary
-- `worktrace.addSessionNote` — Add a note to current session
-- `worktrace.signIn` / `worktrace.signOut` — Google auth
-- `worktrace.setDisplayName` — Set display name for cards
-- `worktrace.generateCard` — Generate shareable session card
-- `worktrace.runSafetyCheck` — Run safety scan on uncommitted changes
-
-- `worktrace.showContext` — Show continuity context for current workspace
-- `worktrace.searchHistory` — Search past session history
-
-Configuration: `worktrace.agentPath` (path to agent server.js), `worktrace.safetyMonitor` (enable/disable safety monitoring)
-
-## Usage/Plan System
-
-Firestore `users/{uid}` stores plan tier and monthly usage. Limits: free (50/month), pro (500/month), enterprise (5000/month). Auto-resets on month boundary. Usage service (`backend/src/services/usage.ts`) checks and increments counters.
+Keep `CONTEXT.md` under 20 lines total. Do NOT summarize the full conversation — only what's needed to resume next session.
