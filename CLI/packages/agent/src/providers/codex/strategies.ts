@@ -111,7 +111,7 @@ function whamToSnapshot(data: WhamUsage, fetchedAt: number): UsageSnapshot {
   const sessionQuota = fiveHour ? {
     used: Math.round(fiveHour.used_percent * 100) / 100,
     cap: 100,
-    unit: 'requests' as const,
+    unit: 'percent' as const,
     resetsAt: new Date((fiveHour.reset_at ?? (fetchedAt / 1000 + fiveHour.reset_after_seconds)) * 1000),
     label: '5h window',
   } : undefined;
@@ -119,7 +119,7 @@ function whamToSnapshot(data: WhamUsage, fetchedAt: number): UsageSnapshot {
   const weeklyQuota = weekly ? {
     used: Math.round(weekly.used_percent * 100) / 100,
     cap: 100,
-    unit: 'requests' as const,
+    unit: 'percent' as const,
     resetsAt: new Date((weekly.reset_at ?? (fetchedAt / 1000 + weekly.reset_after_seconds)) * 1000),
     label: 'weekly',
   } : undefined;

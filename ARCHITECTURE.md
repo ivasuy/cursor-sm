@@ -4,12 +4,12 @@ Worktrace v0.1 — local-first AI usage intelligence for developers.
 
 ---
 
-## 1) System Topology
+## System Topology
 
 ```mermaid
 graph TB
     subgraph "Presentation Clients"
-        CLI[worktrace CLI<br/>Terminal renderer]
+        CLI[worktrace CLI<br/>TUI shell]
         EXT[VS Code Extension<br/>Status bar + commands]
     end
 
@@ -53,193 +53,7 @@ graph TB
 
 ---
 
-## 2) Agent HTTP Routes
-
-```mermaid
-graph LR
-    subgraph "Clients"
-        CLI[CLI]
-        EXT[Extension]
-    end
-
-    subgraph "Agent Routes"
-        H[/health]
-        W[/watch]
-        P[/pace]
-        U[/usage]
-        PR[/providers]
-        R[/report]
-        RE[/repos]
-        WT[/worktrees]
-        FT[/features]
-        FI[/files]
-    end
-
-    subgraph "Services"
-        FD[FetchDriver]
-        DB[(SQLite)]
-        PC[PaceCalculator]
-        RS[ReportService]
-    end
-
-    CLI --> H
-    CLI --> P
-    CLI --> U
-    CLI --> PR
-    CLI --> R
-    EXT --> H
-    EXT --> P
-    EXT --> W
-
-    P --> FD
-    P --> PC
-    U --> FD
-    PR --> FD
-    R --> FD
-    R --> RS
-    RS --> DB
-    W --> DB
-    RE --> DB
-    WT --> DB
-    FT --> DB
-    FI --> DB
-```
-
----
-
-## 3) Provider Fetch Pipeline
-
-```mermaid
-flowchart TD
-    START([startAttributionLoops]) --> LOAD[loadAll: claude · cursor · codex]
-    LOAD --> PROBE{probeAvailability<br/>hosts}
-    PROBE -->|no strategy available| SKIP[skip silently<br/>debug log only]
-    PROBE -->|available| TIMER[setInterval sampleIntervalMs]
-    TIMER --> TICK[tick every 60s]
-    TICK --> CACHE{cache hit?}
-    CACHE -->|yes| RETURN[return cached snapshot]
-    CACHE -->|no| PIPE[runPipeline]
-
-    PIPE --> S1{strategy.isAvailable?}
-    S1 -->|no| UNAVAIL[mark unavailable → next]
-    S1 -->|yes| FETCH[strategy.fetch ctx]
-    FETCH --> OK{success?}
-    OK -->|yes| SNAP[UsageSnapshot]
-    OK -->|error| FB{shouldFallback?}
-    FB -->|yes| S1
-    FB -->|no| THROW[throw error]
-
-    UNAVAIL --> S1
-    SNAP --> CACHESET[cache.set]
-    CACHESET --> WRITE[writeSnapshot db]
-    WRITE --> DELTA[computeDelta prev → now]
-    DELTA --> FLUSH[flushActivityWindows]
-    FLUSH --> ATTRIB[writeAttributions db]
-
-    THROW --> STALE{stale cache<br/>within TTL?}
-    STALE -->|yes| RETURN
-    STALE -->|no| ERR[AllStrategiesFailedError]
-```
-
----
-
-## 4) Strategy Resolution per Provider
-
-```mermaid
-graph TB
-    subgraph "Claude Code"
-        CL1[localLogScan<br/>~/.claude/metrics/costs.jsonl]
-        CL2[apiKeyHttp<br/>ANTHROPIC_API_KEY → api.anthropic.com]
-        CL3[cliPty<br/>claude usage --json]
-        CL1 -->|fallback| CL2 -->|fallback| CL3
-    end
-
-    subgraph "Cursor"
-        CU1[localConfigScan<br/>state.vscdb → aiCodeTracking.dailyStats<br/>+ cursorAuth/accessToken]
-    end
-
-    subgraph "Codex CLI"
-        CO1[localStateScan<br/>~/.codex/state_5.sqlite<br/>threads.tokens_used]
-        CO2[cliPty<br/>codex usage --json]
-        CO3[localConfigScan<br/>~/.codex/usage_cache.json]
-        CO1 -->|fallback| CO2 -->|fallback| CO3
-    end
-```
-
----
-
-## 5) Attribution Flow
-
-```mermaid
-flowchart LR
-    subgraph "File Events"
-        FE[chokidar event<br/>create · modify · delete]
-        FC[(file_changes)]
-        AW[(activity_windows<br/>worktree · branch · window)]
-    end
-
-    subgraph "Provider Snapshots"
-        PS[(provider_snapshots)]
-        DELTA[delta = used_now - used_prev]
-    end
-
-    subgraph "Attribution"
-        WEIGHT[weight by file_event_count<br/>per worktree in window]
-        AT[(attributions<br/>provider · delta · worktree)]
-    end
-
-    subgraph "Report Aggregation"
-        REPO[by repo]
-        WT[by worktree]
-        FEAT[by feature branch]
-        FILE[by file]
-    end
-
-    FE --> FC --> AW
-    PS --> DELTA
-    AW --> WEIGHT
-    DELTA --> WEIGHT
-    WEIGHT --> AT
-    AT --> REPO
-    AT --> WT
-    AT --> FEAT
-    AT --> FILE
-```
-
----
-
-## 6) Pace Calculation
-
-```mermaid
-flowchart TD
-    SNAP[UsageSnapshot] --> QUOTA[pickPrimaryQuota<br/>weekly → session → secondary]
-    QUOTA --> INFER[inferPeriodWindowMs<br/>based on time remaining]
-
-    INFER --> W1["≤ 6h remaining → 5h window"]
-    INFER --> W2["≤ 2d remaining → 1d window"]
-    INFER --> W3["≤ 9d remaining → 7d window"]
-    INFER --> W4["≤ 40d remaining → 30d window"]
-
-    W1 & W2 & W3 & W4 --> CALC[computePace<br/>used · limit · periodStart · periodEnd · now]
-
-    CALC --> EXP[expectedPct = elapsed / totalWindow]
-    CALC --> ACT[actualPct = used / limit]
-    EXP & ACT --> DELTA[delta = actualPct - expectedPct]
-
-    DELTA --> S1{"delta ≤ -10%"}
-    DELTA --> S2{"-10% < delta ≤ +10%"}
-    DELTA --> S3{"+10% < delta ≤ +30%"}
-    DELTA --> S4{"delta > +30%"}
-
-    S1 -->|yes| AHEAD[🟢 ahead]
-    S2 -->|yes| ONTRACK[🟡 on-track]
-    S3 -->|yes| WARN[🟠 warning]
-    S4 -->|yes| CRIT[🔴 critical]
-```
-
----
-
-## 7) Data Model
+## Data Model
 
 ```mermaid
 erDiagram
@@ -315,63 +129,158 @@ erDiagram
 
 ---
 
-## 8) Monorepo Layout
+## Monorepo Layout
 
-```mermaid
-graph TD
-    ROOT[cursor-sm/]
-
-    ROOT --> CLI_DIR[cli/]
-    ROOT --> EXT_DIR[extension/]
-    ROOT --> DOCS_DIR[docs/]
-    ROOT --> ARCH[ARCHITECTURE.md]
-
-    CLI_DIR --> AGENT[packages/agent/]
-    CLI_DIR --> CLI[packages/cli/]
-
-    AGENT --> PROVIDERS[src/providers/]
-    AGENT --> REPORT[src/report/]
-    AGENT --> ROUTES[src/routes/]
-    AGENT --> SERVER[src/server.ts]
-    AGENT --> WATCHER[src/watcher.ts]
-
-    PROVIDERS --> HOST[_host/ http · pty · sqlite · keychain]
-    PROVIDERS --> SHARED[_shared/ types · registry · fetch-driver]
-    PROVIDERS --> PCLAUDE[claude/ descriptor · strategies · parser]
-    PROVIDERS --> PCURSOR[cursor/ descriptor · strategies · parser]
-    PROVIDERS --> PCODEX[codex/ descriptor · strategies · parser]
-
-    REPORT --> DB[db.ts migrations]
-    REPORT --> ALOOP[attribution-loop.ts]
-    REPORT --> RLOOP[reconcile-loop.ts]
-    REPORT --> PACE[pace-calculator.ts]
-    REPORT --> SVC[report-service.ts]
-
-    CLI --> CMDS[src/commands/ pace · usage · report…]
-    CLI --> RENDER[src/render/ bars · cards · tables]
-    CLI --> AC[src/agent-client.ts]
-
-    EXT_DIR --> VSRC[src/ status bar · commands]
-    DOCS_DIR --> SPECS[superpowers/ specs · plans]
+```
+cursor-sm/
+├── ARCHITECTURE.md          # this file
+├── README.md                # project overview and quickstart
+├── CLAUDE.md                # AI assistant instructions
+│
+├── cli/                     # npm workspace root
+│   ├── package.json         # workspace definition
+│   ├── tsconfig.base.json   # shared TS config
+│   │
+│   ├── packages/agent/      # worktrace-agent daemon
+│   └── packages/cli/        # worktrace CLI (TUI)
+│
+├── extension/               # VS Code extension
+│
+└── docs/
+    └── superpowers/
+        ├── specs/           # design specifications
+        └── plans/           # implementation plans
 ```
 
 ---
 
-## 9) Build
+## Package: `packages/agent`
 
-```bash
-# install
-cd cli && npm install
+The long-running Express daemon. Clients (CLI, extension) talk to it over HTTP on `127.0.0.1:9315`.
 
-# build all workspaces
-npm run build --workspaces
-# → packages/agent/dist/
-# → packages/cli/dist/
-
-# extension (separate)
-cd extension && npm run compile
-
-# run
-node packages/agent/dist/server.js &
-node packages/cli/dist/index.js pace
 ```
+src/
+├── server.ts                # Express app, route mounting, daemon lifecycle
+├── daemon.ts                # ensureAgent — start daemon if not running, health-check
+├── watcher.ts               # chokidar file-change listener → activity_windows
+│
+├── providers/
+│   ├── _host/               # low-level OS/host adapters
+│   │   ├── browser-cookies.ts   # read + decrypt browser cookies (Chrome/Firefox)
+│   │   ├── http.ts              # fetch wrapper with timeout + retry
+│   │   ├── keychain.ts          # macOS Keychain access for cookie decryption
+│   │   ├── logger.ts            # structured logger (pino)
+│   │   ├── playwright.ts        # headless browser for cookie extraction
+│   │   ├── process-patterns.ts  # detect running AI tool processes
+│   │   ├── process-sampler.ts   # poll /proc or ps for CPU/mem snapshots
+│   │   ├── pty.ts               # spawn CLI tools in a pseudo-TTY
+│   │   ├── status.ts            # provider availability status helpers
+│   │   ├── token-cost.ts        # token → USD conversion
+│   │   ├── token-cost-models.ts # per-model pricing table
+│   │   └── index.ts             # barrel export
+│   │
+│   ├── _shared/             # framework types shared by all providers
+│   │   ├── types.ts             # UsageSnapshot, ProviderDescriptor, Strategy interfaces
+│   │   ├── descriptor.ts        # base ProviderDescriptor helpers
+│   │   ├── registry.ts          # ProviderRegistry — load + probe all providers
+│   │   ├── fetch-driver.ts      # FetchDriver — route requests to correct provider
+│   │   ├── fetch-pipeline.ts    # runPipeline — strategy waterfall with cache + fallback
+│   │   ├── fetch-strategy.ts    # FetchStrategy base class
+│   │   └── cache.ts             # in-memory TTL cache for snapshots
+│   │
+│   ├── claude/              # Claude Code provider
+│   │   ├── descriptor.ts        # quota metadata, strategy list, display config
+│   │   ├── strategies.ts        # localLogScan · apiKeyHttp · cliPty · cookieApi
+│   │   ├── parser.ts            # parse costs.jsonl and Claude web API responses
+│   │   └── models.ts            # Claude model ID → display name map
+│   │
+│   ├── cursor/              # Cursor provider
+│   │   ├── descriptor.ts        # quota metadata, strategy list
+│   │   ├── strategies.ts        # localConfigScan (state.vscdb) · cookieApi
+│   │   ├── parser.ts            # parse Cursor DB rows and usage-summary API
+│   │   └── models.ts            # Cursor model IDs
+│   │
+│   └── codex/               # OpenAI Codex CLI provider
+│       ├── descriptor.ts        # quota metadata, strategy list
+│       ├── strategies.ts        # localStateScan · cliPty · whamApi
+│       ├── parser.ts            # parse state_5.sqlite and wham/usage API
+│       └── models.ts            # Codex model IDs
+│
+├── report/
+│   ├── db.ts                    # SQLite migrations and query helpers
+│   ├── app-context.ts           # AppContext — shared singleton (db, hosts, cache)
+│   ├── attribution-loop.ts      # startAttributionLoops — 60s provider poll
+│   ├── attribution-writer.ts    # write attributions rows after delta computation
+│   ├── activity-writer.ts       # write file_changes + activity_windows
+│   ├── reconcile-loop.ts        # daily drift reconciliation scheduler
+│   ├── reconcile.ts             # reconcile logic — compare attributed vs reported
+│   ├── pace-calculator.ts       # computePace — burn-rate, ETA, status (ahead/warn/crit)
+│   ├── report-service.ts        # aggregate attributions into repo/worktree/feature reports
+│   ├── repo-registry.ts         # detect and register git repos from worktrees
+│   ├── sample-loop.ts           # process sampler scheduler
+│   ├── sample-writer.ts         # write process samples to DB
+│   ├── snapshot-writer.ts       # write provider_snapshots rows
+│   ├── worktree-scanner.ts      # detect git worktrees from repo root
+│   ├── file-utils.ts            # path normalization helpers
+│   └── constants.ts             # shared constants (port, intervals, paths)
+│
+└── routes/
+    ├── health.ts                # GET /health — liveness probe
+    ├── usage.ts                 # GET /usage — current usage snapshot per provider
+    ├── pace.ts                  # GET /pace — burn rate, ETA, quota status
+    ├── providers.ts             # GET /providers — available providers + strategies
+    ├── report.ts                # GET /report — attributed cost breakdown
+    ├── repos.ts                 # GET /repos — registered repos
+    ├── worktrees.ts             # GET /worktrees — worktrees per repo
+    ├── watch.ts                 # POST /watch — register a path to watch
+    ├── features.ts              # GET /features — feature branch attribution
+    └── files.ts                 # GET /files — per-file attribution
+```
+
+---
+
+## Package: `packages/cli`
+
+Interactive TUI shell built on `neo-blessed`. Entry point: `worktrace` binary.
+
+```
+src/
+├── index.ts                 # CLI entry — parse args, launch TUI or run one-shot command
+├── agent-client.ts          # typed HTTP client wrapping all agent routes
+├── messages.ts              # user-facing string constants
+├── types.ts                 # shared CLI-side types (mirrors agent snapshot shapes)
+├── neo-blessed.d.ts         # ambient type declarations for neo-blessed
+│
+└── tui/
+    ├── app.ts               # root blessed Screen setup, widget mount, main loop
+    ├── run.ts               # bootstrap: ensure agent, open TUI, handle exit
+    ├── boot-sequence.ts     # animated startup sequence before data loads
+    ├── data-client.ts       # polling loop — fetch snapshots and dispatch to reducer
+    ├── reducer.ts           # pure state reducer (AppState → Action → AppState)
+    ├── actions.ts           # action type definitions
+    ├── keymap.ts            # keybinding table (q quit, tab switch panel, etc.)
+    ├── view-models.ts       # derive display-ready data from AppState
+    ├── widgets.ts           # reusable blessed widget factories (bars, cards, tables)
+    ├── theme.ts             # color palette and style constants
+    │
+    ├── boot-sequence.test.ts
+    ├── keymap.test.ts
+    ├── reducer.test.ts
+    └── view-models.test.ts
+```
+
+---
+
+## Package: `extension`
+
+VS Code extension — shows provider quota in the status bar and exposes commands.
+
+```
+src/
+├── extension.ts             # activate/deactivate, register commands, start poll loop
+├── status-bar.ts            # StatusBarItem — format and update quota display
+├── agent-client.ts          # HTTP client for agent routes
+├── workspace.ts             # detect workspace root, pass to agent /watch
+└── types.ts                 # VS Code–side types
+```
+

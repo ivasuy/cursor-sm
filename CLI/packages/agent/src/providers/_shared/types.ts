@@ -32,7 +32,7 @@ export interface ProviderCapabilities {
   modelSelection: boolean;
 }
 
-export type QuotaUnit = 'requests' | 'tokens' | 'credits' | 'minutes';
+export type QuotaUnit = 'requests' | 'tokens' | 'credits' | 'minutes' | 'percent';
 
 export interface QuotaBar {
   used: number;

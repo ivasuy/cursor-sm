@@ -51,7 +51,7 @@ export function parseUsageSummary(raw: unknown, fetchedAt: number): UsageSnapsho
   const weekly = plan ? {
     used: Math.round(totalPct * 10) / 10,
     cap: 100,
-    unit: 'requests' as const,
+    unit: 'percent' as const,
     resetsAt: billingEnd,
     label: 'total usage',
   } : undefined;
@@ -60,7 +60,7 @@ export function parseUsageSummary(raw: unknown, fetchedAt: number): UsageSnapsho
   const session = plan ? {
     used: Math.round(autoPct * 10) / 10,
     cap: 100,
-    unit: 'requests' as const,
+    unit: 'percent' as const,
     resetsAt: billingEnd,
     label: 'auto + composer',
   } : undefined;
@@ -69,7 +69,7 @@ export function parseUsageSummary(raw: unknown, fetchedAt: number): UsageSnapsho
   const secondary = plan ? {
     used: Math.round(apiPct * 10) / 10,
     cap: 100,
-    unit: 'requests' as const,
+    unit: 'percent' as const,
     resetsAt: billingEnd,
     label: 'api usage',
   } : undefined;

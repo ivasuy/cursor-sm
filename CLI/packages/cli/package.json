@@ -13,20 +13,18 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc -w"
+    "dev": "tsc -w",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@worktrace/agent": "*",
-    "boxen": "^8.0.1",
-    "chalk": "^5.4.1",
-    "cli-table3": "^0.6.5",
     "commander": "^13.1.0",
-    "gradient-string": "^3.0.0",
-    "ora": "^8.1.1"
+    "neo-blessed": "^0.2.0"
   },
   "devDependencies": {
-    "@types/gradient-string": "^1.1.6",
+    "@types/blessed": "^0.1.25",
     "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.0"
   }
 }

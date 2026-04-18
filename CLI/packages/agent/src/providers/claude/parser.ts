@@ -24,20 +24,20 @@ interface ClaudeWebUsageResponse {
   extra_usage?: ClaudeWebExtraUsage;
 }
 
-function windowToQuotaBar(w: ClaudeWebWindow | null | undefined, unit: 'requests' | 'tokens' | 'credits' | 'minutes', fetchedAt: number, label?: string) {
+function windowToQuotaBar(w: ClaudeWebWindow | null | undefined, fetchedAt: number, label?: string) {
   if (!w) return undefined;
-  const used = Math.round(w.utilization * 1000) / 10; // convert to %
+  const used = Math.round(w.utilization * 1000) / 10; // convert utilization to 0–100%
   const resetsAt = w.resets_at ? new Date(w.resets_at) : new Date(fetchedAt + 7 * 86400_000);
-  return { used, cap: 100, unit, resetsAt, label };
+  return { used, cap: 100, unit: 'percent' as const, resetsAt, label };
 }
 
 export function parseClaudeWebUsage(raw: unknown, fetchedAt: number): UsageSnapshot {
   const r = (raw ?? {}) as ClaudeWebUsageResponse;
 
-  const session = windowToQuotaBar(r.five_hour, 'requests', fetchedAt, '5h window');
-  const weekly  = windowToQuotaBar(r.seven_day,  'requests', fetchedAt, '7-day');
-  const opus    = windowToQuotaBar(r.seven_day_opus,   'requests', fetchedAt, 'opus 7-day');
-  const sonnet  = windowToQuotaBar(r.seven_day_sonnet, 'requests', fetchedAt, 'sonnet 7-day');
+  const session = windowToQuotaBar(r.five_hour, fetchedAt, '5h window');
+  const weekly  = windowToQuotaBar(r.seven_day,  fetchedAt, '7-day');
+  const opus    = windowToQuotaBar(r.seven_day_opus,   fetchedAt, 'opus 7-day');
+  const sonnet  = windowToQuotaBar(r.seven_day_sonnet, fetchedAt, 'sonnet 7-day');
 
   const extra = r.extra_usage;
   let costUSD: number | undefined;
